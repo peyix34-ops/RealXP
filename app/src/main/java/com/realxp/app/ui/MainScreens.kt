@@ -1,39 +1,120 @@
 package com.realxp.app.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.realxp.app.data.Areas
 import com.realxp.app.data.Levels
+import com.realxp.app.data.Quests
 import com.realxp.app.data.Store
+import kotlinx.coroutines.delay
+import kotlin.random.Random
+
+@Composable
+fun animatedProgress(target: Float, ms: Int = 1000): Float {
+    val a = remember { Animatable(0f) }
+    LaunchedEffect(target) {
+        a.animateTo(target, tween(ms, easing = FastOutSlowInEasing))
+    }
+    return a.value
+}
+
+@Composable
+fun Bar(p: Float, h: Int = 6) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(h.dp)
+            .background(RX.Line, RoundedCornerShape(h.dp))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(p.coerceIn(0.01f, 1f))
+                .height(h.dp)
+                .background(RX.Accent, RoundedCornerShape(h.dp))
+        )
+    }
+}
 
 @Composable
 fun App(store: Store) {
     var screen by remember { mutableStateOf(if (store.chosen().isEmpty()) "welcome" else "home") }
     var chosen by remember { mutableStateOf(store.chosen()) }
+    var openArea by remember { mutableStateOf<String?>(null) }
+    var tick by remember { mutableStateOf(0) }
 
-    when (screen) {
-        "welcome" -> WelcomeScreen(onStart = { screen = "pick" })
-        "pick" -> PickScreen(onDone = { list ->
-            store.saveChosen(list)
-            chosen = list
-            screen = "home"
-        })
-        else -> HomeScreen(store, chosen)
+    val area = openArea
+    if (area != null) {
+        BackHandler { openArea = null; tick++ }
+        AreaScreen(store, area) { openArea = null; tick++ }
+    } else {
+        when (screen) {
+            "welcome" -> WelcomeScreen(onStart = { screen = "pick" })
+            "pick" -> PickScreen { list ->
+                store.saveChosen(list)
+                chosen = list
+                screen = "home"
+            }
+            else -> HomeScreen(store, chosen, tick) { openArea = it }
+        }
+    }
+}
+
+@Composable
+fun AreaChip(name: String, on: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val border by animateColorAsState(if (on) RX.Accent else RX.Line, tween(250), label = "b")
+    val bg by animateColorAsState(
+        if (on) RX.Accent.copy(alpha = 0.12f) else RX.Panel, tween(250), label = "bg"
+    )
+    val sc by animateFloatAsState(if (on) 1.03f else 1f, tween(250), label = "sc")
+    Box(
+        modifier = modifier
+            .scale(sc)
+            .background(bg, RoundedCornerShape(18.dp))
+            .border(1.dp, border, RoundedCornerShape(18.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 18.dp, vertical = 24.dp)
+    ) {
+        Text(
+            name,
+            color = if (on) RX.Accent else RX.Text,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
@@ -46,141 +127,328 @@ fun PickScreen(onDone: (List<String>) -> Unit) {
             .fillMaxSize()
             .background(RX.Bg)
             .systemBarsPadding()
-            .padding(24.dp)
     ) {
-        Spacer(Modifier.height(24.dp))
-        Text("What do you want to level up?", color = RX.Text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        Text("Pick 1 to 3.", color = RX.Muted, fontSize = 16.sp)
-        Spacer(Modifier.height(24.dp))
-
-        Areas.all.forEach { name ->
-            val on = name in selected
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+        ) {
+            Spacer(Modifier.height(28.dp))
+            Text("Choose your arenas", color = RX.Text, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            Text("Pick everything you want to level up.", color = RX.Muted, fontSize = 15.sp)
+            Spacer(Modifier.height(24.dp))
+            Areas.all.chunked(2).forEach { pair ->
+                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                    pair.forEachIndexed { i, name ->
+                        if (i > 0) Spacer(Modifier.width(12.dp))
+                        AreaChip(name, name in selected, Modifier.weight(1f)) {
+                            selected = if (name in selected) selected - name else selected + name
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+        Column(modifier = Modifier.padding(24.dp)) {
+            Text("${selected.size} selected", color = RX.Muted, fontSize = 13.sp)
+            Spacer(Modifier.height(10.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 6.dp)
-                    .background(if (on) RX.Panel else RX.Bg, RoundedCornerShape(16.dp))
-                    .border(1.dp, if (on) RX.Accent else RX.Line, RoundedCornerShape(16.dp))
-                    .clickable {
-                        selected = if (on) selected - name
-                        else if (selected.size < 3) selected + name
-                        else selected
-                    }
-                    .padding(20.dp)
+                    .alpha(if (selected.isEmpty()) 0.35f else 1f)
+                    .border(1.dp, RX.Accent, RoundedCornerShape(14.dp))
+                    .clickable(enabled = selected.isNotEmpty()) { onDone(selected) }
+                    .padding(vertical = 16.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    name,
-                    color = if (on) RX.Accent else RX.Text,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("CONTINUE", color = RX.Accent, fontWeight = FontWeight.Bold, letterSpacing = 4.sp)
             }
-        }
-
-        Spacer(Modifier.weight(1f))
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .alpha(if (selected.isEmpty()) 0.4f else 1f)
-                .border(1.dp, RX.Accent, RoundedCornerShape(14.dp))
-                .clickable(enabled = selected.isNotEmpty()) { onDone(selected) }
-                .padding(vertical = 16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("CONTINUE", color = RX.Accent, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
         }
     }
 }
 
 @Composable
-fun HomeScreen(store: Store, chosen: List<String>) {
+fun HomeScreen(store: Store, chosen: List<String>, tick: Int, onOpen: (String) -> Unit) {
+    val total = remember(tick) { store.totalXp() }
+    val info = Levels.overall(total)
+    val p = animatedProgress(info.into.toFloat() / info.need, 1400)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(RX.Bg)
             .systemBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp)
+            .padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(16.dp))
-        Text("REAL XP", color = RX.Text, fontSize = 28.sp, fontWeight = FontWeight.Bold, letterSpacing = 6.sp)
-        Spacer(Modifier.height(4.dp))
-        Text("Log what you actually did.", color = RX.Muted, fontSize = 15.sp)
-        Spacer(Modifier.height(24.dp))
-        chosen.forEach { area ->
-            AreaCard(area, store)
+        Spacer(Modifier.height(20.dp))
+        Text("REAL XP", color = RX.Muted, fontSize = 14.sp, letterSpacing = 6.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(28.dp))
+        Box(contentAlignment = Alignment.Center) {
+            Canvas(modifier = Modifier.size(240.dp)) {
+                val stroke = 14.dp.toPx()
+                val topLeft = Offset(stroke / 2, stroke / 2)
+                val arcSize = Size(size.width - stroke, size.height - stroke)
+                drawArc(
+                    color = RX.Line, startAngle = -90f, sweepAngle = 360f, useCenter = false,
+                    topLeft = topLeft, size = arcSize,
+                    style = Stroke(stroke, cap = StrokeCap.Round)
+                )
+                drawArc(
+                    color = RX.Accent, startAngle = -90f, sweepAngle = 360f * p, useCenter = false,
+                    topLeft = topLeft, size = arcSize,
+                    style = Stroke(stroke, cap = StrokeCap.Round)
+                )
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("LEVEL", color = RX.Muted, fontSize = 13.sp, letterSpacing = 4.sp)
+                Text("${info.level}", color = RX.Text, fontSize = 72.sp, fontWeight = FontWeight.Bold)
+                Text("${info.into} / ${info.need} XP", color = RX.Muted, fontSize = 13.sp)
+            }
         }
+        Spacer(Modifier.height(36.dp))
+        Text(
+            "YOUR ARENAS",
+            color = RX.Muted, fontSize = 13.sp, letterSpacing = 4.sp,
+            modifier = Modifier.align(Alignment.Start)
+        )
+        Spacer(Modifier.height(12.dp))
+        chosen.forEach { name -> AreaRow(name, store, tick) { onOpen(name) } }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
 @Composable
-fun AreaCard(area: String, store: Store) {
-    var xp by remember { mutableStateOf(store.xp(area)) }
+fun AreaRow(area: String, store: Store, tick: Int, onClick: () -> Unit) {
+    val xp = remember(tick) { store.xp(area) }
     val info = Levels.of(xp)
-    val progress by animateFloatAsState(
-        targetValue = (info.into.toFloat() / info.need).coerceIn(0f, 1f),
-        animationSpec = tween(800),
-        label = "progress"
-    )
-
+    val p = animatedProgress(info.into.toFloat() / info.need, 900)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 16.dp)
-            .background(RX.Panel, RoundedCornerShape(20.dp))
-            .border(1.dp, RX.Line, RoundedCornerShape(20.dp))
-            .padding(20.dp)
+            .padding(bottom = 12.dp)
+            .background(RX.Panel, RoundedCornerShape(18.dp))
+            .border(1.dp, RX.Line, RoundedCornerShape(18.dp))
+            .clickable { onClick() }
+            .padding(18.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(area, color = RX.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text("LV ${info.level}", color = RX.Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(area, color = RX.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("LV ${info.level}", color = RX.Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
-        Spacer(Modifier.height(14.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .background(RX.Line, RoundedCornerShape(4.dp))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(progress)
-                    .height(8.dp)
-                    .background(RX.Accent, RoundedCornerShape(4.dp))
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        Text("${info.into} / ${info.need} XP", color = RX.Muted, fontSize = 13.sp)
-        Spacer(Modifier.height(16.dp))
-        Row(modifier = Modifier.fillMaxWidth()) {
-            LogButton("15 min  +20 XP", Modifier.weight(1f)) {
-                store.addXp(area, 20)
-                xp += 20
-            }
-            Spacer(Modifier.width(12.dp))
-            LogButton("30 min  +45 XP", Modifier.weight(1f)) {
-                store.addXp(area, 45)
-                xp += 45
-            }
-        }
+        Spacer(Modifier.height(12.dp))
+        Bar(p)
     }
 }
 
 @Composable
-fun LogButton(label: String, modifier: Modifier, onClick: () -> Unit) {
-    Box(
-        modifier = modifier
-            .border(1.dp, RX.Accent, RoundedCornerShape(12.dp))
-            .clickable { onClick() }
-            .padding(vertical = 12.dp),
-        contentAlignment = Alignment.Center
+fun QuestRow(target: Int, reward: Int, today: Int) {
+    val done = today >= target
+    val border by animateColorAsState(if (done) RX.Accent else RX.Line, tween(400), label = "qb")
+    val bg by animateColorAsState(
+        if (done) RX.Accent.copy(alpha = 0.12f) else RX.Panel, tween(400), label = "qbg"
+    )
+    val p = animatedProgress((today.toFloat() / target).coerceIn(0f, 1f), 700)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp)
+            .background(bg, RoundedCornerShape(16.dp))
+            .border(1.dp, border, RoundedCornerShape(16.dp))
+            .padding(16.dp)
     ) {
-        Text(label, color = RX.Accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                if (done) "✓  Work $target min" else "Work $target min",
+                color = if (done) RX.Accent else RX.Text,
+                fontSize = 16.sp, fontWeight = FontWeight.Bold
+            )
+            Text(
+                "+$reward XP",
+                color = if (done) RX.Accent else RX.Muted,
+                fontSize = 14.sp, fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Bar(p, 4)
+        Spacer(Modifier.height(6.dp))
+        Text("${minOf(today, target)} / $target min", color = RX.Muted, fontSize = 12.sp)
+    }
+}
+
+@Composable
+fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
+    var xp by remember { mutableStateOf(store.xp(area)) }
+    var today by remember { mutableStateOf(store.minutesToday(area)) }
+    var input by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+    var pending by remember { mutableStateOf<Int?>(null) }
+    var banner by remember { mutableStateOf<String?>(null) }
+    var shown by remember { mutableStateOf("") }
+
+    val info = Levels.of(xp)
+    val p = animatedProgress(info.into.toFloat() / info.need, 900)
+
+    LaunchedEffect(banner) {
+        val b = banner
+        if (b != null) {
+            shown = b
+            delay(1800)
+            banner = null
+        }
+    }
+
+    val commit: (Int) -> Unit = { minutes ->
+        val before = Levels.of(xp).level
+        val gain = store.logMinutes(area, minutes)
+        xp = store.xp(area)
+        today = store.minutesToday(area)
+        input = ""
+        val after = Levels.of(xp).level
+        banner = if (after > before) "LEVEL UP  ·  $area LV $after"
+        else if (gain > 0) "+$gain XP"
+        else "Logged"
+    }
+
+    val pm = pending
+    if (pm != null) {
+        AlertDialog(
+            onDismissRequest = {},
+            containerColor = RX.Panel,
+            title = { Text("Be honest.", color = RX.Text) },
+            text = {
+                Text(
+                    "You actually did this, right? Or are you just fooling yourself? \uD83D\uDE42",
+                    color = RX.Muted
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { pending = null; commit(pm) }) {
+                    Text("Yes, I did", color = RX.Accent)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pending = null; banner = "Respect for the honesty." }) {
+                    Text("Not really", color = RX.Muted)
+                }
+            }
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(RX.Bg)
+            .systemBarsPadding()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+        ) {
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "←  Back",
+                color = RX.Muted, fontSize = 15.sp,
+                modifier = Modifier.clickable { onBack() }.padding(vertical = 8.dp)
+            )
+            Spacer(Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(area, color = RX.Text, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                Text("LV ${info.level}", color = RX.Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(14.dp))
+            Bar(p, 8)
+            Spacer(Modifier.height(8.dp))
+            Text("${info.into} / ${info.need} XP", color = RX.Muted, fontSize = 13.sp)
+
+            Spacer(Modifier.height(32.dp))
+            Text("HOW LONG DID YOU WORK?", color = RX.Muted, fontSize = 13.sp, letterSpacing = 3.sp)
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = input,
+                onValueChange = { v -> input = v.filter { it.isDigit() }.take(3) },
+                label = { Text("Minutes") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = RX.Text,
+                    unfocusedTextColor = RX.Text,
+                    focusedBorderColor = RX.Accent,
+                    unfocusedBorderColor = RX.Line,
+                    cursorColor = RX.Accent,
+                    focusedLabelColor = RX.Accent,
+                    unfocusedLabelColor = RX.Muted
+                )
+            )
+            if (error.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Text(error, color = RX.Muted, fontSize = 13.sp)
+            }
+            Spacer(Modifier.height(14.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, RX.Accent, RoundedCornerShape(14.dp))
+                    .clickable {
+                        val m = input.toIntOrNull()
+                        if (m == null || m < 5 || m > 240) {
+                            error = "Enter between 5 and 240 minutes."
+                        } else {
+                            error = ""
+                            if (Random.nextInt(5) == 0) pending = m else commit(m)
+                        }
+                    }
+                    .padding(vertical = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("LOG SESSION", color = RX.Accent, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
+            }
+
+            Spacer(Modifier.height(32.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("TODAY'S QUESTS", color = RX.Muted, fontSize = 13.sp, letterSpacing = 3.sp)
+                Text("$today min today", color = RX.Muted, fontSize = 13.sp)
+            }
+            Spacer(Modifier.height(12.dp))
+            Quests.steps.forEach { (m, x) -> QuestRow(m, x, today) }
+            Spacer(Modifier.height(32.dp))
+        }
+
+        AnimatedVisibility(
+            visible = banner != null,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
+            enter = fadeIn() + slideInVertically { -it },
+            exit = fadeOut()
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(RX.Panel, RoundedCornerShape(14.dp))
+                    .border(1.dp, RX.Accent, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 22.dp, vertical = 12.dp)
+            ) {
+                Text(shown, color = RX.Accent, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+        }
     }
 }
