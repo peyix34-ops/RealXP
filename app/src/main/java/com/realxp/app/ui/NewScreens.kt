@@ -12,7 +12,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,7 +30,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.realxp.app.data.Areas
 import com.realxp.app.data.Levels
+import com.realxp.app.data.Ranks
 import com.realxp.app.data.Store
+import com.realxp.app.data.formatTime
+
+val Danger = Color(0xFFFF6B6B)
 
 fun arenaColor(name: String): Color = when (name) {
     "English" -> Color(0xFF1F5FE0)
@@ -102,7 +108,13 @@ fun ArenaChoice(name: String, on: Boolean, modifier: Modifier, onClick: () -> Un
 }
 
 @Composable
-fun ArenaPicker(onDone: (List<String>) -> Unit) {
+fun ArenaPicker(
+    options: List<String>,
+    title: String,
+    buttonLabel: String,
+    onBack: (() -> Unit)?,
+    onDone: (List<String>) -> Unit
+) {
     var selected by remember { mutableStateOf(listOf<String>()) }
     val ready = selected.isNotEmpty()
 
@@ -118,21 +130,39 @@ fun ArenaPicker(onDone: (List<String>) -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
         ) {
-            Spacer(Modifier.height(28.dp))
-            Text("CHOOSE YOUR AREAS", color = RX.Muted, fontSize = 13.sp, letterSpacing = 4.sp)
+            Spacer(Modifier.height(20.dp))
+            if (onBack != null) {
+                Text(
+                    "←  Back",
+                    color = RX.Muted, fontSize = 15.sp,
+                    modifier = Modifier.clickable { onBack() }.padding(vertical = 8.dp)
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+            Text(
+                if (onBack == null) "CHOOSE YOUR AREAS" else "ADD AREAS",
+                color = RX.Muted, fontSize = 13.sp, letterSpacing = 4.sp
+            )
             Spacer(Modifier.height(10.dp))
             Text(
-                "Pick everything\nyou want to level up.",
+                title,
                 color = RX.Text, fontSize = 30.sp, fontWeight = FontWeight.Bold, lineHeight = 36.sp
             )
             Spacer(Modifier.height(24.dp))
-            Areas.all.chunked(2).forEach { pair ->
+            if (options.isEmpty()) {
+                Text("You've added every arena.", color = RX.Muted, fontSize = 16.sp)
+            }
+            options.chunked(2).forEach { pair ->
                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
                     pair.forEachIndexed { i, name ->
                         if (i > 0) Spacer(Modifier.width(12.dp))
                         ArenaChoice(name, name in selected, Modifier.weight(1f)) {
                             selected = if (name in selected) selected - name else selected + name
                         }
+                    }
+                    if (pair.size == 1) {
+                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.weight(1f))
                     }
                 }
             }
@@ -156,7 +186,7 @@ fun ArenaPicker(onDone: (List<String>) -> Unit) {
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "CONTINUE",
+                    buttonLabel,
                     color = if (ready) Color.White else RX.Muted,
                     fontWeight = FontWeight.Bold, letterSpacing = 3.sp
                 )
@@ -166,8 +196,16 @@ fun ArenaPicker(onDone: (List<String>) -> Unit) {
 }
 
 @Composable
-fun ArenaCard(area: String, store: Store, tick: Int, onClick: () -> Unit) {
+fun ArenaCard(
+    area: String,
+    store: Store,
+    tick: Int,
+    editing: Boolean,
+    canRemove: Boolean,
+    onClick: () -> Unit
+) {
     val xp = remember(tick) { store.xp(area) }
+    val live = remember(tick) { store.running()?.area == area }
     val info = Levels.of(xp)
     val p = animatedProgress(info.into.toFloat() / info.need, 900)
     Row(
@@ -175,7 +213,7 @@ fun ArenaCard(area: String, store: Store, tick: Int, onClick: () -> Unit) {
             .fillMaxWidth()
             .padding(bottom = 12.dp)
             .background(RX.Panel, RoundedCornerShape(20.dp))
-            .border(1.dp, RX.Line, RoundedCornerShape(20.dp))
+            .border(1.dp, if (live) RX.Accent else RX.Line, RoundedCornerShape(20.dp))
             .clickable { onClick() }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -185,10 +223,22 @@ fun ArenaCard(area: String, store: Store, tick: Int, onClick: () -> Unit) {
         Column(modifier = Modifier.weight(1f)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(area, color = RX.Text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Text("LV ${info.level}", color = RX.Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Column {
+                    Text(area, color = RX.Text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (live) "●  IN SESSION" else Ranks.title(info.level),
+                        color = if (live) RX.Accent else RX.Muted,
+                        fontSize = 12.sp, letterSpacing = 1.sp
+                    )
+                }
+                if (editing && canRemove) {
+                    Text("REMOVE", color = Danger, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                } else {
+                    Text("LV ${info.level}", color = RX.Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
             }
             Spacer(Modifier.height(10.dp))
             Bar(p, 5)
@@ -203,10 +253,40 @@ fun ArenaCard(area: String, store: Store, tick: Int, onClick: () -> Unit) {
 }
 
 @Composable
-fun LifeHome(store: Store, chosen: List<String>, tick: Int, onOpen: (String) -> Unit) {
+fun LifeHome(
+    store: Store,
+    chosen: List<String>,
+    tick: Int,
+    onOpen: (String) -> Unit,
+    onAdd: () -> Unit,
+    onRemove: (String) -> Unit
+) {
     val total = remember(tick) { store.totalXp() }
+    val invested = remember(tick) { formatTime(store.allSeconds()) }
     val info = Levels.overall(total)
     val p = animatedProgress(info.into.toFloat() / info.need, 1400)
+    var editing by remember { mutableStateOf(false) }
+    var toRemove by remember { mutableStateOf<String?>(null) }
+
+    val rm = toRemove
+    if (rm != null) {
+        AlertDialog(
+            onDismissRequest = { toRemove = null },
+            containerColor = RX.Panel,
+            title = { Text("Remove $rm?", color = RX.Text) },
+            text = { Text("Your XP is kept. You can add it back anytime.", color = RX.Muted) },
+            confirmButton = {
+                TextButton(onClick = { toRemove = null; onRemove(rm) }) {
+                    Text("Remove", color = Danger)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { toRemove = null }) {
+                    Text("Cancel", color = RX.Muted)
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -240,17 +320,53 @@ fun LifeHome(store: Store, chosen: List<String>, tick: Int, onOpen: (String) -> 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("LEVEL", color = RX.Muted, fontSize = 13.sp, letterSpacing = 4.sp)
                 Text("${info.level}", color = RX.Text, fontSize = 76.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    Ranks.title(info.level).uppercase(),
+                    color = RX.Accent, fontSize = 12.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(4.dp))
                 Text("${info.into} / ${info.need} XP", color = RX.Muted, fontSize = 13.sp)
             }
         }
-        Spacer(Modifier.height(36.dp))
-        Text(
-            "YOUR ARENAS",
-            color = RX.Muted, fontSize = 13.sp, letterSpacing = 4.sp,
-            modifier = Modifier.align(Alignment.Start)
-        )
+        Spacer(Modifier.height(14.dp))
+        Text("$invested invested", color = RX.Muted, fontSize = 14.sp)
+        Spacer(Modifier.height(30.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("YOUR ARENAS", color = RX.Muted, fontSize = 13.sp, letterSpacing = 4.sp)
+            if (chosen.size > 1) {
+                Text(
+                    if (editing) "DONE" else "EDIT",
+                    color = RX.Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp,
+                    modifier = Modifier.clickable { editing = !editing }.padding(vertical = 6.dp)
+                )
+            }
+        }
         Spacer(Modifier.height(12.dp))
-        chosen.forEach { name -> ArenaCard(name, store, tick) { onOpen(name) } }
-        Spacer(Modifier.height(24.dp))
+        chosen.forEach { name ->
+            ArenaCard(name, store, tick, editing, chosen.size > 1) {
+                if (editing) {
+                    if (chosen.size > 1) toRemove = name
+                } else {
+                    onOpen(name)
+                }
+            }
+        }
+        if (chosen.size < Areas.all.size) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, RX.Line, RoundedCornerShape(20.dp))
+                    .clickable { onAdd() }
+                    .padding(vertical = 18.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("+  Add arena", color = RX.Accent, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+        }
+        Spacer(Modifier.height(32.dp))
     }
 }
