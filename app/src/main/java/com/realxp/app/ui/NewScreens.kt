@@ -1,6 +1,10 @@
 package com.realxp.app.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -23,8 +27,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.realxp.app.data.Areas
@@ -34,6 +41,92 @@ import com.realxp.app.data.Store
 import com.realxp.app.data.formatTime
 
 val Danger = Color(0xFFFF6B6B)
+
+object RankColors {
+    val normal = Color(0xFFF2F6FF)
+    val bronze = Color(0xFFD9904F)
+    val silver = Color(0xFFC9D3E6)
+    val gold = Color(0xFFFFC93C)
+    val diamond = Color(0xFF7DF0FF)
+
+    private val starts = listOf(1, 10, 20, 30, 40)
+    private val colors = listOf(normal, bronze, silver, gold, diamond)
+
+    fun forLevel(level: Int): Color {
+        var idx = 0
+        for (i in starts.indices) {
+            if (level >= starts[i]) idx = i
+        }
+        if (idx >= starts.size - 1) return diamond
+        val span = (starts[idx + 1] - starts[idx]).toFloat()
+        val f = ((level - starts[idx]) / span) * 0.5f
+        return lerp(colors[idx], colors[idx + 1], f)
+    }
+
+    fun tone(level: Int): Color = if (level >= 10) forLevel(level) else RX.Accent
+}
+
+@Composable
+private fun ShimmerText(
+    text: String,
+    fontSize: TextUnit,
+    modifier: Modifier,
+    fontWeight: FontWeight,
+    letterSpacing: TextUnit,
+    maxLines: Int,
+    overflow: TextOverflow
+) {
+    val shift by rememberInfiniteTransition(label = "shimmer").animateFloat(
+        initialValue = 0f,
+        targetValue = 700f,
+        animationSpec = infiniteRepeatable(tween(2600, easing = LinearEasing)),
+        label = "shimmerValue"
+    )
+    val brush = Brush.linearGradient(
+        colors = listOf(RankColors.diamond, Color.White, RankColors.diamond),
+        start = Offset(shift - 350f, 0f),
+        end = Offset(shift, 0f)
+    )
+    Text(
+        text,
+        modifier = modifier,
+        maxLines = maxLines,
+        overflow = overflow,
+        style = TextStyle(
+            brush = brush,
+            fontSize = fontSize,
+            fontWeight = fontWeight,
+            letterSpacing = letterSpacing
+        )
+    )
+}
+
+@Composable
+fun RankText(
+    text: String,
+    level: Int,
+    fontSize: TextUnit,
+    modifier: Modifier = Modifier,
+    fontWeight: FontWeight = FontWeight.Normal,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip
+) {
+    if (level >= 50) {
+        ShimmerText(text, fontSize, modifier, fontWeight, letterSpacing, maxLines, overflow)
+    } else {
+        Text(
+            text,
+            color = RankColors.forLevel(level),
+            fontSize = fontSize,
+            fontWeight = fontWeight,
+            letterSpacing = letterSpacing,
+            maxLines = maxLines,
+            overflow = overflow,
+            modifier = modifier
+        )
+    }
+}
 
 fun arenaColor(name: String): Color = when (name) {
     "English" -> Color(0xFF3D7BFF)
@@ -184,38 +277,45 @@ fun ArenaCell(
     onClick: () -> Unit
 ) {
     val xp = remember(tick) { store.xp(area) }
-    val live = remember(tick) { store.running()?.area == area }
     val info = Levels.of(xp)
+    val tone = RankColors.tone(info.level)
     val p = animatedProgress(info.into.toFloat() / info.need, 900)
     Column(
         modifier = modifier
             .height(96.dp)
             .background(RX.Panel, RoundedCornerShape(14.dp))
-            .border(1.dp, if (live) RX.Accent else RX.Line, RoundedCornerShape(14.dp))
+            .border(
+                1.dp,
+                if (info.level >= 10) tone.copy(alpha = 0.5f) else RX.Line,
+                RoundedCornerShape(14.dp)
+            )
             .clickable { onClick() }
             .padding(10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(8.dp).background(arenaColor(area), CircleShape))
             Spacer(Modifier.width(6.dp))
-            Text(
-                area,
-                color = RX.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
+            RankText(
+                area, info.level, 13.sp,
+                modifier = Modifier.weight(1f),
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             if (editing && canRemove) {
                 Text("✕", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            } else if (live) {
-                Text("●", color = RX.Accent, fontSize = 10.sp)
             }
         }
         Spacer(Modifier.height(2.dp))
-        Text(Ranks.title(info.level), color = RX.Muted, fontSize = 10.sp)
+        Text(
+            Ranks.title(info.level),
+            color = if (info.level >= 10) tone else RX.Muted,
+            fontSize = 10.sp
+        )
         Spacer(Modifier.weight(1f))
-        Text("LV ${info.level}", color = RX.Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("LV ${info.level}", color = tone, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
-        Bar(p, 3)
+        Bar(p, 3, tone)
     }
 }
 
@@ -320,9 +420,9 @@ fun LifeHome(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("LEVEL", color = RX.Muted, fontSize = 10.sp, letterSpacing = 3.sp)
                 Text("${info.level}", color = RX.Text, fontSize = 46.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    Ranks.title(info.level).uppercase(),
-                    color = RX.Accent, fontSize = 10.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold
+                RankText(
+                    Ranks.title(info.level).uppercase(), info.level, 10.sp,
+                    fontWeight = FontWeight.Bold, letterSpacing = 2.sp
                 )
             }
         }
