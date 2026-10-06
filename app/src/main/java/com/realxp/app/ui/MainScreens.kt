@@ -4,12 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -23,8 +18,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -32,21 +30,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.realxp.app.data.Areas
 import com.realxp.app.data.DayStat
 import com.realxp.app.data.Levels
 import com.realxp.app.data.Ranks
-import com.realxp.app.data.Sess
 import com.realxp.app.data.Store
+import com.realxp.app.data.Xp
 import com.realxp.app.data.formatTime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -62,7 +57,7 @@ fun animatedProgress(target: Float, ms: Int = 1000): Float {
 }
 
 @Composable
-fun Bar(p: Float, h: Int = 6) {
+fun Bar(p: Float, h: Int = 6, color: Color = RX.Accent) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -73,7 +68,7 @@ fun Bar(p: Float, h: Int = 6) {
             modifier = Modifier
                 .fillMaxWidth(p.coerceIn(0.01f, 1f))
                 .height(h.dp)
-                .background(RX.Accent, RoundedCornerShape(h.dp))
+                .background(color, RoundedCornerShape(h.dp))
         )
     }
 }
@@ -127,67 +122,22 @@ fun App(store: Store) {
     }
 }
 
-fun clock(sec: Int): String = "%02d:%02d".format(sec / 60, sec % 60)
-
 @Composable
-fun SessionRing(progress: Float, top: String, main: String, bottom: String, live: Boolean, topColor: Color) {
-    val pulse by rememberInfiniteTransition(label = "pulse").animateFloat(
-        initialValue = 0.1f,
-        targetValue = 0.6f,
-        animationSpec = infiniteRepeatable(tween(1200), RepeatMode.Reverse),
-        label = "pulseValue"
-    )
-    Box(contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.size(170.dp)) {
-            val stroke = 8.dp.toPx()
-            val topLeft = Offset(stroke / 2, stroke / 2)
-            val arcSize = Size(size.width - stroke, size.height - stroke)
-            drawArc(
-                color = RX.Line, startAngle = -90f, sweepAngle = 360f, useCenter = false,
-                topLeft = topLeft, size = arcSize,
-                style = Stroke(stroke, cap = StrokeCap.Round)
-            )
-            if (progress > 0.002f) {
-                drawArc(
-                    brush = Brush.linearGradient(listOf(RX.Blue, RX.Accent)),
-                    startAngle = -90f, sweepAngle = 360f * progress, useCenter = false,
-                    topLeft = topLeft, size = arcSize,
-                    style = Stroke(stroke, cap = StrokeCap.Round)
-                )
-            }
-            if (live) {
-                drawCircle(
-                    color = RX.Accent.copy(alpha = pulse * 0.5f),
-                    radius = (size.minDimension - stroke) / 2 - 12.dp.toPx(),
-                    style = Stroke(1.dp.toPx())
-                )
-            }
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(top, color = topColor, fontSize = 10.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
-            Text(main, color = RX.Text, fontSize = 36.sp, fontWeight = FontWeight.Bold)
-            Text(bottom, color = RX.Muted, fontSize = 11.sp)
-        }
-    }
-}
-
-@Composable
-fun GoalChip(minutes: Int, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Box(
+fun QuickLog(minutes: Int, gain: Int, modifier: Modifier, onClick: () -> Unit) {
+    Column(
         modifier = modifier
-            .then(
-                if (selected) Modifier.background(RX.Accent.copy(alpha = 0.14f), RoundedCornerShape(12.dp))
-                else Modifier
-            )
-            .border(1.dp, if (selected) RX.Accent else RX.Line, RoundedCornerShape(12.dp))
+            .background(RX.Panel, RoundedCornerShape(12.dp))
+            .border(1.dp, RX.Line, RoundedCornerShape(12.dp))
             .clickable { onClick() }
-            .padding(vertical = 10.dp),
-        contentAlignment = Alignment.Center
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Text("${minutes}m", color = RX.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Spacer(Modifier.height(2.dp))
         Text(
-            "${minutes}m",
-            color = if (selected) RX.Accent else RX.Muted,
-            fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1
+            if (gain > 0) "+$gain XP" else "max",
+            color = if (gain > 0) RX.Accent else RX.Muted,
+            fontSize = 11.sp, maxLines = 1
         )
     }
 }
@@ -207,7 +157,7 @@ fun StatBox(label: String, value: String, modifier: Modifier) {
 }
 
 @Composable
-fun WeekChart(days: List<DayStat>) {
+fun WeekChart(days: List<DayStat>, tone: Color) {
     val maxM = maxOf(60, days.maxOf { it.minutes })
     Row(
         modifier = Modifier
@@ -231,8 +181,8 @@ fun WeekChart(days: List<DayStat>) {
                         .background(
                             when {
                                 d.minutes == 0 -> RX.Line
-                                d.isToday -> RX.Accent
-                                else -> RX.Blue.copy(alpha = 0.6f)
+                                d.isToday -> tone
+                                else -> tone.copy(alpha = 0.5f)
                             },
                             RoundedCornerShape(6.dp)
                         )
@@ -240,7 +190,7 @@ fun WeekChart(days: List<DayStat>) {
                 Spacer(Modifier.height(5.dp))
                 Text(
                     d.label,
-                    color = if (d.isToday) RX.Accent else RX.Muted,
+                    color = if (d.isToday) tone else RX.Muted,
                     fontSize = 11.sp,
                     fontWeight = if (d.isToday) FontWeight.Bold else FontWeight.Normal
                 )
@@ -254,6 +204,7 @@ fun LevelUpOverlay(area: String, level: Int, onDismiss: () -> Unit) {
     val pop = remember { Animatable(0.3f) }
     val wave = remember { Animatable(0f) }
     val fade = remember { Animatable(0f) }
+    val tone = RankColors.tone(level)
     LaunchedEffect(Unit) {
         launch { fade.animateTo(1f, tween(300)) }
         launch {
@@ -277,7 +228,7 @@ fun LevelUpOverlay(area: String, level: Int, onDismiss: () -> Unit) {
             for (i in 0..2) {
                 val t = (wave.value - i * 0.2f).coerceIn(0f, 1f)
                 drawCircle(
-                    color = RX.Accent.copy(alpha = (1f - t) * 0.6f),
+                    color = tone.copy(alpha = (1f - t) * 0.6f),
                     radius = maxR * t,
                     style = Stroke(2.dp.toPx())
                 )
@@ -287,12 +238,12 @@ fun LevelUpOverlay(area: String, level: Int, onDismiss: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.scale(pop.value).alpha(fade.value)
         ) {
-            Text("LEVEL UP", color = RX.Accent, fontSize = 14.sp, letterSpacing = 7.sp, fontWeight = FontWeight.Bold)
+            Text("LEVEL UP", color = tone, fontSize = 14.sp, letterSpacing = 7.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(4.dp))
-            Text("$level", color = RX.Text, fontSize = 88.sp, fontWeight = FontWeight.ExtraBold)
-            Text(
-                Ranks.title(level).uppercase(),
-                color = RX.Text, fontSize = 17.sp, letterSpacing = 4.sp, fontWeight = FontWeight.Bold
+            RankText("$level", level, 88.sp, fontWeight = FontWeight.ExtraBold)
+            RankText(
+                Ranks.title(level).uppercase(), level, 17.sp,
+                fontWeight = FontWeight.Bold, letterSpacing = 4.sp
             )
             Spacer(Modifier.height(6.dp))
             Text(area, color = RX.Muted, fontSize = 14.sp)
@@ -305,77 +256,66 @@ fun LevelUpOverlay(area: String, level: Int, onDismiss: () -> Unit) {
 @Composable
 fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
     var xp by remember { mutableStateOf(store.xp(area)) }
-    var running by remember { mutableStateOf(store.running()) }
-    var now by remember { mutableStateOf(System.currentTimeMillis()) }
-    var goal by remember { mutableStateOf(30) }
     var rev by remember { mutableStateOf(0) }
-    var banner by remember { mutableStateOf<String?>(null) }
+    var input by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+    var pendingMin by remember { mutableStateOf<Int?>(null) }
+    var bannerText by remember { mutableStateOf<String?>(null) }
     var shown by remember { mutableStateOf("") }
-    var askHonest by remember { mutableStateOf(false) }
-    var askCancel by remember { mutableStateOf(false) }
+    var undoable by remember { mutableStateOf(false) }
+    var bannerId by remember { mutableStateOf(0) }
     var levelUp by remember { mutableStateOf<Int?>(null) }
 
     val info = Levels.of(xp)
+    val tone = RankColors.tone(info.level)
     val barP = animatedProgress(info.into.toFloat() / info.need, 900)
-
-    val r = running
-    val mine = r != null && r.area == area
-    val elapsed = if (r != null && r.area == area)
-        ((now - r.startMs) / 1000).toInt().coerceIn(0, Sess.MAX_SEC) else 0
-    val goalMin = if (r != null && r.area == area) r.goalMin else goal
-    val ringP by animateFloatAsState(
-        if (mine) (elapsed / (goalMin * 60f)).coerceIn(0f, 1f) else 0f,
-        tween(300), label = "ringP"
-    )
 
     val todaySec = remember(rev) { store.secondsToday(area) }
     val totalSec = remember(rev) { store.totalSeconds(area) }
     val count = remember(rev) { store.sessionCount(area) }
     val week = remember(rev) { store.week(area) }
+    val todayMin = todaySec / 60.0
+    val xpToday = Xp.forMinutes(todayMin)
+    val dayP = animatedProgress((xpToday / Xp.DAILY_CAP.toFloat()).coerceIn(0f, 1f), 700)
 
-    LaunchedEffect(running) {
-        while (running != null) {
-            now = System.currentTimeMillis()
-            delay(250)
+    val gainFor: (Int) -> Int = { m -> Xp.forMinutes(todayMin + m) - Xp.forMinutes(todayMin) }
+
+    LaunchedEffect(bannerId) {
+        if (bannerId > 0) {
+            delay(if (undoable) 4500L else 2000L)
+            bannerText = null
         }
     }
 
-    LaunchedEffect(banner) {
-        val b = banner
-        if (b != null) {
-            shown = b
-            delay(2000)
-            banner = null
-        }
+    val show: (String, Boolean) -> Unit = { text, undo ->
+        shown = text
+        bannerText = text
+        undoable = undo
+        bannerId++
     }
 
-    val commitFinish: () -> Unit = {
+    val doLog: (Int) -> Unit = { m ->
         val before = Levels.of(xp).level
-        val res = store.finishSession()
-        running = null
+        val res = store.logMinutes(area, m)
         xp = store.xp(area)
         rev++
-        if (res != null && res.counted) {
-            val after = Levels.of(xp).level
-            if (after > before) levelUp = after
-            banner = if (res.gain > 0) "+${res.gain} XP  ·  ${formatTime(res.seconds)}"
-            else "${formatTime(res.seconds)} logged  ·  daily XP cap reached"
-        }
+        input = ""
+        error = ""
+        val after = Levels.of(xp).level
+        if (after > before) levelUp = after
+        show(
+            if (res.gain > 0) "+${res.gain} XP  ·  ${m}m"
+            else "${m}m logged  ·  daily XP cap reached",
+            true
+        )
     }
 
-    val finish: () -> Unit = {
-        if (elapsed < Sess.MIN_SEC) {
-            store.cancelSession()
-            running = null
-            banner = "Sessions under 5 min don't count."
-        } else if (Random.nextInt(5) == 0) {
-            askHonest = true
-        } else {
-            commitFinish()
-        }
+    val request: (Int) -> Unit = { m ->
+        if (Random.nextInt(5) == 0) pendingMin = m else doLog(m)
     }
 
-    if (askHonest) {
+    val pm = pendingMin
+    if (pm != null) {
         AlertDialog(
             onDismissRequest = {},
             containerColor = RX.Panel,
@@ -387,16 +327,14 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
                 )
             },
             confirmButton = {
-                TextButton(onClick = { askHonest = false; commitFinish() }) {
+                TextButton(onClick = { pendingMin = null; doLog(pm) }) {
                     Text("Yes, I did", color = RX.Accent)
                 }
             },
             dismissButton = {
                 TextButton(onClick = {
-                    askHonest = false
-                    store.cancelSession()
-                    running = null
-                    banner = "Respect for the honesty."
+                    pendingMin = null
+                    show("Respect for the honesty.", false)
                 }) {
                     Text("Not really", color = RX.Muted)
                 }
@@ -404,26 +342,7 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
         )
     }
 
-    if (askCancel) {
-        AlertDialog(
-            onDismissRequest = { askCancel = false },
-            containerColor = RX.Panel,
-            title = { Text("Discard this session?", color = RX.Text) },
-            text = { Text("The time won't count and no XP is earned.", color = RX.Muted) },
-            confirmButton = {
-                TextButton(onClick = {
-                    askCancel = false
-                    store.cancelSession()
-                    running = null
-                }) { Text("Discard", color = Danger) }
-            },
-            dismissButton = {
-                TextButton(onClick = { askCancel = false }) {
-                    Text("Keep going", color = RX.Accent)
-                }
-            }
-        )
-    }
+    val typed = input.toIntOrNull()
 
     Box(
         modifier = Modifier
@@ -453,90 +372,95 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.size(10.dp).background(arenaColor(area), CircleShape))
                         Spacer(Modifier.width(8.dp))
-                        Text(area, color = RX.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        RankText(area, info.level, 26.sp, fontWeight = FontWeight.Bold)
                     }
-                    Text(
-                        Ranks.title(info.level).uppercase(),
-                        color = RX.Muted, fontSize = 11.sp, letterSpacing = 2.sp
+                    RankText(
+                        Ranks.title(info.level).uppercase(), info.level, 11.sp,
+                        letterSpacing = 2.sp, fontWeight = FontWeight.Medium
                     )
                 }
-                Text("LV ${info.level}", color = RX.Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                RankText("LV ${info.level}", info.level, 20.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.height(12.dp))
-            Bar(barP, 5)
+            Bar(barP, 5, tone)
             Spacer(Modifier.height(5.dp))
             Text("${info.into} / ${info.need} XP", color = RX.Muted, fontSize = 12.sp)
 
-            Spacer(Modifier.height(20.dp))
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                if (mine) {
-                    val reached = elapsed >= goalMin * 60
-                    SessionRing(
-                        ringP,
-                        if (reached) "GOAL REACHED" else "FOCUS",
-                        clock(elapsed),
-                        "of ${clock(goalMin * 60)}",
-                        true,
-                        if (reached) RX.Accent else RX.Muted
+            Spacer(Modifier.height(26.dp))
+            Text("LOG YOUR WORK", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
+            Spacer(Modifier.height(10.dp))
+            Row(modifier = Modifier.fillMaxWidth()) {
+                listOf(15, 30, 60, 90).forEachIndexed { i, m ->
+                    if (i > 0) Spacer(Modifier.width(8.dp))
+                    QuickLog(m, gainFor(m), Modifier.weight(1f)) { request(m) }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { v ->
+                        input = v.filter { it.isDigit() }.take(3)
+                        error = ""
+                    },
+                    label = { Text("Other (min)") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = RX.Text,
+                        unfocusedTextColor = RX.Text,
+                        focusedBorderColor = RX.Accent,
+                        unfocusedBorderColor = RX.Line,
+                        cursorColor = RX.Accent,
+                        focusedLabelColor = RX.Accent,
+                        unfocusedLabelColor = RX.Muted
                     )
-                } else {
-                    SessionRing(0f, "GOAL", "$goal", "minutes", false, RX.Muted)
-                }
-            }
-            Spacer(Modifier.height(18.dp))
-
-            if (mine) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(RX.Button, RoundedCornerShape(50))
-                        .clickable { finish() }
-                        .padding(vertical = 14.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("FINISH", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
-                }
-                Text(
-                    "Discard session",
-                    color = RX.Muted, fontSize = 13.sp,
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .clickable { askCancel = true }
-                        .padding(12.dp)
                 )
-            } else {
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    listOf(15, 30, 60, 90).forEachIndexed { i, g ->
-                        if (i > 0) Spacer(Modifier.width(8.dp))
-                        GoalChip(g, g == goal, Modifier.weight(1f)) { goal = g }
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.width(8.dp))
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .background(RX.Button, RoundedCornerShape(50))
+                        .width(84.dp)
+                        .height(56.dp)
+                        .background(RX.Button, RoundedCornerShape(12.dp))
                         .clickable {
-                            if (r != null) {
-                                banner = "Finish your ${r.area} session first."
+                            val m = input.toIntOrNull()
+                            if (m == null || m < 1 || m > 240) {
+                                error = "Enter 1 to 240 minutes."
                             } else {
-                                store.startSession(area, goal)
-                                running = store.running()
-                                now = System.currentTimeMillis()
+                                request(m)
                             }
-                        }
-                        .padding(vertical = 14.dp),
+                        },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("START SESSION", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
+                    Text("LOG", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                 }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Max 180 XP per day  ·  min 5 min",
-                    color = RX.Muted, fontSize = 11.sp,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
             }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                when {
+                    error.isNotEmpty() -> error
+                    typed != null && typed in 1..240 -> "+${gainFor(typed)} XP for ${typed}m"
+                    else -> "Type any amount, for example 5."
+                },
+                color = if (error.isNotEmpty()) Danger else RX.Muted,
+                fontSize = 12.sp
+            )
+
+            Spacer(Modifier.height(22.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("TODAY", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
+                Text("$xpToday / ${Xp.DAILY_CAP} XP", color = RX.Muted, fontSize = 12.sp)
+            }
+            Spacer(Modifier.height(8.dp))
+            Bar(dayP, 5, tone)
 
             Spacer(Modifier.height(22.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
@@ -544,28 +468,44 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
                 StatBox("TOTAL", formatTime(totalSec), Modifier.weight(1f))
                 Spacer(Modifier.width(8.dp))
-                StatBox("SESSIONS", "$count", Modifier.weight(1f))
+                StatBox("LOGS", "$count", Modifier.weight(1f))
             }
             Spacer(Modifier.height(22.dp))
             Text("LAST 7 DAYS", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
             Spacer(Modifier.height(10.dp))
-            WeekChart(week)
+            WeekChart(week, tone)
             Spacer(Modifier.height(32.dp))
         }
 
         AnimatedVisibility(
-            visible = banner != null,
+            visible = bannerText != null,
             modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
             enter = fadeIn() + slideInVertically { -it },
             exit = fadeOut()
         ) {
-            Box(
+            Row(
                 modifier = Modifier
                     .background(RX.Panel, RoundedCornerShape(12.dp))
                     .border(1.dp, RX.Accent, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 18.dp, vertical = 10.dp)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(shown, color = RX.Accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                if (undoable) {
+                    Spacer(Modifier.width(14.dp))
+                    Text(
+                        "UNDO",
+                        color = RX.Text, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp,
+                        modifier = Modifier
+                            .clickable {
+                                store.undoLast()
+                                xp = store.xp(area)
+                                rev++
+                                show("Undone.", false)
+                            }
+                            .padding(4.dp)
+                    )
+                }
             }
         }
 
