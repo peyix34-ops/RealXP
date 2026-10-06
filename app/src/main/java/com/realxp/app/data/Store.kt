@@ -45,7 +45,8 @@ object Ranks {
 }
 
 object Xp {
-    const val DAILY_CAP = 180
+    const val DAY_MINUTES = 1440
+    const val DAY_SECONDS = DAY_MINUTES * 60
 
     private val pts = listOf(
         0.0 to 0.0, 15.0 to 20.0, 30.0 to 45.0,
@@ -55,7 +56,7 @@ object Xp {
     fun forMinutes(m: Double): Int {
         if (m <= 0.0) return 0
         val last = pts.last()
-        if (m >= last.first) return last.second.toInt()
+        if (m >= last.first) return (last.second + (m - last.first) * 0.5).toInt()
         for (i in 1 until pts.size) {
             val (x0, y0) = pts[i - 1]
             val (x1, y1) = pts[i]
@@ -65,7 +66,7 @@ object Xp {
     }
 }
 
-data class LogResult(val minutes: Int, val gain: Int)
+data class LogResult(val minutes: Int, val gain: Int, val ok: Boolean, val leftMin: Int)
 data class DayStat(val label: String, val minutes: Int, val isToday: Boolean)
 
 fun formatTime(sec: Int): String {
@@ -93,7 +94,7 @@ class Store(context: Context) {
     }
 
     fun xp(area: String): Int = prefs.getInt("xp_$area", 0)
-    fun secondsToday(area: String): Int = prefs.getInt("sec_${area}_${dayKey()}", 0)
+    fun secondsToday(area: String): Int = prefs.getInt("s2_${area}_${dayKey()}", 0)
     fun totalSeconds(area: String): Int = prefs.getInt("tot_$area", 0)
     fun sessionCount(area: String): Int = prefs.getInt("cnt_$area", 0)
     fun allSeconds(): Int = Areas.all.sumOf { totalSeconds(it) }
@@ -106,7 +107,7 @@ class Store(context: Context) {
             c.add(Calendar.DAY_OF_YEAR, -back)
             val key = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(c.time)
             val label = SimpleDateFormat("EEE", Locale.US).format(c.time).take(1)
-            out.add(DayStat(label, prefs.getInt("sec_${area}_$key", 0) / 60, back == 0))
+            out.add(DayStat(label, prefs.getInt("s2_${area}_$key", 0) / 60, back == 0))
         }
         return out
     }
@@ -114,11 +115,15 @@ class Store(context: Context) {
     fun logMinutes(area: String, minutes: Int): LogResult {
         val sec = minutes * 60
         val key = dayKey()
-        val before = prefs.getInt("sec_${area}_$key", 0)
+        val before = prefs.getInt("s2_${area}_$key", 0)
+        if (before + sec > Xp.DAY_SECONDS) {
+            val left = ((Xp.DAY_SECONDS - before) / 60).coerceAtLeast(0)
+            return LogResult(minutes, 0, false, left)
+        }
         val after = before + sec
         val gain = Xp.forMinutes(after / 60.0) - Xp.forMinutes(before / 60.0)
         prefs.edit()
-            .putInt("sec_${area}_$key", after)
+            .putInt("s2_${area}_$key", after)
             .putInt("tot_$area", totalSeconds(area) + sec)
             .putInt("cnt_$area", sessionCount(area) + 1)
             .putInt("xp_$area", xp(area) + gain)
@@ -127,7 +132,7 @@ class Store(context: Context) {
             .putInt("last_sec", sec)
             .putInt("last_gain", gain)
             .apply()
-        return LogResult(minutes, gain)
+        return LogResult(minutes, gain, true, 0)
     }
 
     fun undoLast(): Boolean {
@@ -135,9 +140,9 @@ class Store(context: Context) {
         val key = prefs.getString("last_key", "") ?: ""
         val sec = prefs.getInt("last_sec", 0)
         val gain = prefs.getInt("last_gain", 0)
-        val daySec = prefs.getInt("sec_${area}_$key", 0)
+        val daySec = prefs.getInt("s2_${area}_$key", 0)
         prefs.edit()
-            .putInt("sec_${area}_$key", (daySec - sec).coerceAtLeast(0))
+            .putInt("s2_${area}_$key", (daySec - sec).coerceAtLeast(0))
             .putInt("tot_$area", (totalSeconds(area) - sec).coerceAtLeast(0))
             .putInt("cnt_$area", (sessionCount(area) - 1).coerceAtLeast(0))
             .putInt("xp_$area", (xp(area) - gain).coerceAtLeast(0))
