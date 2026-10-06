@@ -21,6 +21,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -137,8 +138,8 @@ fun SessionRing(progress: Float, top: String, main: String, bottom: String, live
         label = "pulseValue"
     )
     Box(contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.size(260.dp)) {
-            val stroke = 12.dp.toPx()
+        Canvas(modifier = Modifier.size(170.dp)) {
+            val stroke = 8.dp.toPx()
             val topLeft = Offset(stroke / 2, stroke / 2)
             val arcSize = Size(size.width - stroke, size.height - stroke)
             drawArc(
@@ -157,35 +158,36 @@ fun SessionRing(progress: Float, top: String, main: String, bottom: String, live
             if (live) {
                 drawCircle(
                     color = RX.Accent.copy(alpha = pulse * 0.5f),
-                    radius = (size.minDimension - stroke) / 2 - 18.dp.toPx(),
-                    style = Stroke(1.5.dp.toPx())
+                    radius = (size.minDimension - stroke) / 2 - 12.dp.toPx(),
+                    style = Stroke(1.dp.toPx())
                 )
             }
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(top, color = topColor, fontSize = 13.sp, letterSpacing = 4.sp, fontWeight = FontWeight.Bold)
-            Text(main, color = RX.Text, fontSize = 60.sp, fontWeight = FontWeight.Bold)
-            Text(bottom, color = RX.Muted, fontSize = 13.sp)
+            Text(top, color = topColor, fontSize = 10.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
+            Text(main, color = RX.Text, fontSize = 36.sp, fontWeight = FontWeight.Bold)
+            Text(bottom, color = RX.Muted, fontSize = 11.sp)
         }
     }
 }
 
 @Composable
-fun GoalChip(minutes: Int, selected: Boolean, onClick: () -> Unit) {
+fun GoalChip(minutes: Int, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .then(
-                if (selected) Modifier.background(RX.Accent.copy(alpha = 0.14f), RoundedCornerShape(50))
+                if (selected) Modifier.background(RX.Accent.copy(alpha = 0.14f), RoundedCornerShape(12.dp))
                 else Modifier
             )
-            .border(1.dp, if (selected) RX.Accent else RX.Line, RoundedCornerShape(50))
+            .border(1.dp, if (selected) RX.Accent else RX.Line, RoundedCornerShape(12.dp))
             .clickable { onClick() }
-            .padding(horizontal = 18.dp, vertical = 10.dp)
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center
     ) {
         Text(
-            "$minutes min",
+            "${minutes}m",
             color = if (selected) RX.Accent else RX.Muted,
-            fontSize = 14.sp, fontWeight = FontWeight.Bold
+            fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1
         )
     }
 }
@@ -194,13 +196,13 @@ fun GoalChip(minutes: Int, selected: Boolean, onClick: () -> Unit) {
 fun StatBox(label: String, value: String, modifier: Modifier) {
     Column(
         modifier = modifier
-            .background(RX.Panel, RoundedCornerShape(16.dp))
-            .border(1.dp, RX.Line, RoundedCornerShape(16.dp))
-            .padding(14.dp)
+            .background(RX.Panel, RoundedCornerShape(12.dp))
+            .border(1.dp, RX.Line, RoundedCornerShape(12.dp))
+            .padding(10.dp)
     ) {
-        Text(label, color = RX.Muted, fontSize = 11.sp, letterSpacing = 2.sp)
-        Spacer(Modifier.height(6.dp))
-        Text(value, color = RX.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = RX.Muted, fontSize = 10.sp, letterSpacing = 1.5.sp)
+        Spacer(Modifier.height(4.dp))
+        Text(value, color = RX.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 
@@ -210,7 +212,7 @@ fun WeekChart(days: List<DayStat>) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(132.dp),
+            .height(100.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.Bottom
     ) {
@@ -219,27 +221,27 @@ fun WeekChart(days: List<DayStat>) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     if (d.minutes > 0) "${d.minutes}" else "",
-                    color = RX.Muted, fontSize = 10.sp,
-                    modifier = Modifier.height(14.dp)
+                    color = RX.Muted, fontSize = 9.sp,
+                    modifier = Modifier.height(12.dp)
                 )
                 Box(
                     modifier = Modifier
-                        .width(28.dp)
-                        .height((80f * frac + 4f).dp)
+                        .width(22.dp)
+                        .height((56f * frac + 3f).dp)
                         .background(
                             when {
                                 d.minutes == 0 -> RX.Line
                                 d.isToday -> RX.Accent
                                 else -> RX.Blue.copy(alpha = 0.6f)
                             },
-                            RoundedCornerShape(7.dp)
+                            RoundedCornerShape(6.dp)
                         )
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(5.dp))
                 Text(
                     d.label,
                     color = if (d.isToday) RX.Accent else RX.Muted,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = if (d.isToday) FontWeight.Bold else FontWeight.Normal
                 )
             }
@@ -270,14 +272,14 @@ fun LevelUpOverlay(area: String, level: Int, onDismiss: () -> Unit) {
             .clickable { onDismiss() },
         contentAlignment = Alignment.Center
     ) {
-        Canvas(modifier = Modifier.size(340.dp)) {
+        Canvas(modifier = Modifier.size(300.dp)) {
             val maxR = size.minDimension / 2
             for (i in 0..2) {
                 val t = (wave.value - i * 0.2f).coerceIn(0f, 1f)
                 drawCircle(
                     color = RX.Accent.copy(alpha = (1f - t) * 0.6f),
                     radius = maxR * t,
-                    style = Stroke(3.dp.toPx())
+                    style = Stroke(2.dp.toPx())
                 )
             }
         }
@@ -285,16 +287,16 @@ fun LevelUpOverlay(area: String, level: Int, onDismiss: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.scale(pop.value).alpha(fade.value)
         ) {
-            Text("LEVEL UP", color = RX.Accent, fontSize = 16.sp, letterSpacing = 8.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp))
-            Text("$level", color = RX.Text, fontSize = 104.sp, fontWeight = FontWeight.ExtraBold)
+            Text("LEVEL UP", color = RX.Accent, fontSize = 14.sp, letterSpacing = 7.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text("$level", color = RX.Text, fontSize = 88.sp, fontWeight = FontWeight.ExtraBold)
             Text(
                 Ranks.title(level).uppercase(),
-                color = RX.Text, fontSize = 20.sp, letterSpacing = 5.sp, fontWeight = FontWeight.Bold
+                color = RX.Text, fontSize = 17.sp, letterSpacing = 4.sp, fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.height(6.dp))
-            Text(area, color = RX.Muted, fontSize = 15.sp)
-            Spacer(Modifier.height(32.dp))
+            Text(area, color = RX.Muted, fontSize = 14.sp)
+            Spacer(Modifier.height(28.dp))
             Text("Tap to continue", color = RX.Muted, fontSize = 12.sp)
         }
     }
@@ -433,39 +435,39 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = 20.dp)
         ) {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(10.dp))
             Text(
                 "←  Back",
-                color = RX.Muted, fontSize = 15.sp,
+                color = RX.Muted, fontSize = 14.sp,
                 modifier = Modifier.clickable { onBack() }.padding(vertical = 8.dp)
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ArenaTile(area, 48)
-                    Spacer(Modifier.width(14.dp))
-                    Column {
-                        Text(area, color = RX.Text, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                        Text(
-                            Ranks.title(info.level).uppercase(),
-                            color = RX.Muted, fontSize = 12.sp, letterSpacing = 3.sp
-                        )
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.size(10.dp).background(arenaColor(area), CircleShape))
+                        Spacer(Modifier.width(8.dp))
+                        Text(area, color = RX.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                     }
+                    Text(
+                        Ranks.title(info.level).uppercase(),
+                        color = RX.Muted, fontSize = 11.sp, letterSpacing = 2.sp
+                    )
                 }
-                Text("LV ${info.level}", color = RX.Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("LV ${info.level}", color = RX.Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
-            Spacer(Modifier.height(16.dp))
-            Bar(barP, 8)
-            Spacer(Modifier.height(8.dp))
-            Text("${info.into} / ${info.need} XP", color = RX.Muted, fontSize = 13.sp)
+            Spacer(Modifier.height(12.dp))
+            Bar(barP, 5)
+            Spacer(Modifier.height(5.dp))
+            Text("${info.into} / ${info.need} XP", color = RX.Muted, fontSize = 12.sp)
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(20.dp))
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 if (mine) {
                     val reached = elapsed >= goalMin * 60
@@ -481,7 +483,7 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
                     SessionRing(0f, "GOAL", "$goal", "minutes", false, RX.Muted)
                 }
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(18.dp))
 
             if (mine) {
                 Box(
@@ -489,29 +491,27 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
                         .fillMaxWidth()
                         .background(RX.Button, RoundedCornerShape(50))
                         .clickable { finish() }
-                        .padding(vertical = 18.dp),
+                        .padding(vertical = 14.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("FINISH", color = Color.White, fontWeight = FontWeight.Bold, letterSpacing = 4.sp)
+                    Text("FINISH", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
                 }
                 Text(
                     "Discard session",
-                    color = RX.Muted, fontSize = 14.sp,
+                    color = RX.Muted, fontSize = 13.sp,
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
                         .clickable { askCancel = true }
-                        .padding(14.dp)
+                        .padding(12.dp)
                 )
             } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    listOf(15, 30, 60, 90).forEach { g ->
-                        GoalChip(g, g == goal) { goal = g }
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    listOf(15, 30, 60, 90).forEachIndexed { i, g ->
+                        if (i > 0) Spacer(Modifier.width(8.dp))
+                        GoalChip(g, g == goal, Modifier.weight(1f)) { goal = g }
                     }
                 }
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(12.dp))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -525,47 +525,47 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
                                 now = System.currentTimeMillis()
                             }
                         }
-                        .padding(vertical = 18.dp),
+                        .padding(vertical = 14.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("START SESSION", color = Color.White, fontWeight = FontWeight.Bold, letterSpacing = 4.sp)
+                    Text("START SESSION", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(
-                    "Up to 180 XP per day. Sessions under 5 min don't count.",
-                    color = RX.Muted, fontSize = 12.sp,
+                    "Max 180 XP per day  ·  min 5 min",
+                    color = RX.Muted, fontSize = 11.sp,
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
             }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(22.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
                 StatBox("TODAY", formatTime(todaySec), Modifier.weight(1f))
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(8.dp))
                 StatBox("TOTAL", formatTime(totalSec), Modifier.weight(1f))
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(8.dp))
                 StatBox("SESSIONS", "$count", Modifier.weight(1f))
             }
-            Spacer(Modifier.height(32.dp))
-            Text("LAST 7 DAYS", color = RX.Muted, fontSize = 13.sp, letterSpacing = 3.sp)
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(22.dp))
+            Text("LAST 7 DAYS", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
+            Spacer(Modifier.height(10.dp))
             WeekChart(week)
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(32.dp))
         }
 
         AnimatedVisibility(
             visible = banner != null,
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
             enter = fadeIn() + slideInVertically { -it },
             exit = fadeOut()
         ) {
             Box(
                 modifier = Modifier
-                    .background(RX.Panel, RoundedCornerShape(14.dp))
-                    .border(1.dp, RX.Accent, RoundedCornerShape(14.dp))
-                    .padding(horizontal = 22.dp, vertical = 12.dp)
+                    .background(RX.Panel, RoundedCornerShape(12.dp))
+                    .border(1.dp, RX.Accent, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 18.dp, vertical = 10.dp)
             ) {
-                Text(shown, color = RX.Accent, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(shown, color = RX.Accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
         }
 
