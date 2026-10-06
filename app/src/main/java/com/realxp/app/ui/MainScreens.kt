@@ -123,7 +123,7 @@ fun App(store: Store) {
 }
 
 @Composable
-fun QuickLog(minutes: Int, gain: Int, modifier: Modifier, onClick: () -> Unit) {
+fun QuickLog(minutes: Int, gainText: String, modifier: Modifier, onClick: () -> Unit) {
     Column(
         modifier = modifier
             .background(RX.Panel, RoundedCornerShape(12.dp))
@@ -134,11 +134,7 @@ fun QuickLog(minutes: Int, gain: Int, modifier: Modifier, onClick: () -> Unit) {
     ) {
         Text("${minutes}m", color = RX.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         Spacer(Modifier.height(2.dp))
-        Text(
-            if (gain > 0) "+$gain XP" else "max",
-            color = if (gain > 0) RX.Accent else RX.Muted,
-            fontSize = 11.sp, maxLines = 1
-        )
+        Text(gainText, color = RX.Accent, fontSize = 11.sp, maxLines = 1)
     }
 }
 
@@ -200,7 +196,7 @@ fun WeekChart(days: List<DayStat>, tone: Color) {
 }
 
 @Composable
-fun LevelUpOverlay(area: String, level: Int, onDismiss: () -> Unit) {
+fun LevelUpOverlay(area: String, level: Int, gained: Int, onDismiss: () -> Unit) {
     val pop = remember { Animatable(0.3f) }
     val wave = remember { Animatable(0f) }
     val fade = remember { Animatable(0f) }
@@ -238,7 +234,10 @@ fun LevelUpOverlay(area: String, level: Int, onDismiss: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.scale(pop.value).alpha(fade.value)
         ) {
-            Text("LEVEL UP", color = tone, fontSize = 14.sp, letterSpacing = 7.sp, fontWeight = FontWeight.Bold)
+            Text(
+                if (gained > 1) "+$gained LEVELS" else "LEVEL UP",
+                color = tone, fontSize = 14.sp, letterSpacing = 7.sp, fontWeight = FontWeight.Bold
+            )
             Spacer(Modifier.height(4.dp))
             RankText("$level", level, 88.sp, fontWeight = FontWeight.ExtraBold)
             RankText(
@@ -265,6 +264,7 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
     var undoable by remember { mutableStateOf(false) }
     var bannerId by remember { mutableStateOf(0) }
     var levelUp by remember { mutableStateOf<Int?>(null) }
+    var gained by remember { mutableStateOf(1) }
 
     val info = Levels.of(xp)
     val tone = RankColors.tone(info.level)
@@ -276,13 +276,13 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
     val week = remember(rev) { store.week(area) }
     val todayMin = todaySec / 60.0
     val xpToday = Xp.forMinutes(todayMin)
-    val dayP = animatedProgress((xpToday / Xp.DAILY_CAP.toFloat()).coerceIn(0f, 1f), 700)
 
     val gainFor: (Int) -> Int = { m -> Xp.forMinutes(todayMin + m) - Xp.forMinutes(todayMin) }
+    val fits: (Int) -> Boolean = { m -> todayMin + m <= Xp.DAY_MINUTES }
 
     LaunchedEffect(bannerId) {
         if (bannerId > 0) {
-            delay(if (undoable) 4500L else 2000L)
+            delay(if (undoable) 4500L else 2500L)
             bannerText = null
         }
     }
@@ -297,17 +297,24 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
     val doLog: (Int) -> Unit = { m ->
         val before = Levels.of(xp).level
         val res = store.logMinutes(area, m)
-        xp = store.xp(area)
-        rev++
-        input = ""
-        error = ""
-        val after = Levels.of(xp).level
-        if (after > before) levelUp = after
-        show(
-            if (res.gain > 0) "+${res.gain} XP  ·  ${m}m"
-            else "${m}m logged  ·  daily XP cap reached",
-            true
-        )
+        if (!res.ok) {
+            show(
+                if (res.leftMin > 0) "A day has 24 hours. ${res.leftMin}m left today."
+                else "A day only has 24 hours.",
+                false
+            )
+        } else {
+            xp = store.xp(area)
+            rev++
+            input = ""
+            error = ""
+            val after = Levels.of(xp).level
+            if (after > before) {
+                gained = after - before
+                levelUp = after
+            }
+            show("+${res.gain} XP  ·  ${m}m", true)
+        }
     }
 
     val request: (Int) -> Unit = { m ->
@@ -392,7 +399,11 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
             Row(modifier = Modifier.fillMaxWidth()) {
                 listOf(15, 30, 60, 90).forEachIndexed { i, m ->
                     if (i > 0) Spacer(Modifier.width(8.dp))
-                    QuickLog(m, gainFor(m), Modifier.weight(1f)) { request(m) }
+                    QuickLog(
+                        m,
+                        if (fits(m)) "+${gainFor(m)} XP" else "—",
+                        Modifier.weight(1f)
+                    ) { request(m) }
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -403,7 +414,7 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
                 OutlinedTextField(
                     value = input,
                     onValueChange = { v ->
-                        input = v.filter { it.isDigit() }.take(3)
+                        input = v.filter { it.isDigit() }.take(4)
                         error = ""
                     },
                     label = { Text("Other (min)") },
@@ -429,8 +440,10 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
                         .background(RX.Button, RoundedCornerShape(12.dp))
                         .clickable {
                             val m = input.toIntOrNull()
-                            if (m == null || m < 1 || m > 240) {
-                                error = "Enter 1 to 240 minutes."
+                            if (m == null || m < 1) {
+                                error = "Type how many minutes you worked."
+                            } else if (!fits(m)) {
+                                error = "A day only has 24 hours."
                             } else {
                                 request(m)
                             }
@@ -444,7 +457,8 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
             Text(
                 when {
                     error.isNotEmpty() -> error
-                    typed != null && typed in 1..240 -> "+${gainFor(typed)} XP for ${typed}m"
+                    typed != null && typed >= 1 && fits(typed) -> "+${gainFor(typed)} XP for ${typed}m"
+                    typed != null && typed >= 1 -> "A day only has 24 hours."
                     else -> "Type any amount, for example 5."
                 },
                 color = if (error.isNotEmpty()) Danger else RX.Muted,
@@ -456,13 +470,11 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("TODAY", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
-                Text("$xpToday / ${Xp.DAILY_CAP} XP", color = RX.Muted, fontSize = 12.sp)
+                Text("TODAY'S XP", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
+                Text("+$xpToday XP", color = tone, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
-            Spacer(Modifier.height(8.dp))
-            Bar(dayP, 5, tone)
 
-            Spacer(Modifier.height(22.dp))
+            Spacer(Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
                 StatBox("TODAY", formatTime(todaySec), Modifier.weight(1f))
                 Spacer(Modifier.width(8.dp))
@@ -511,7 +523,7 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
 
         val lu = levelUp
         if (lu != null) {
-            LevelUpOverlay(area, lu) { levelUp = null }
+            LevelUpOverlay(area, lu, gained) { levelUp = null }
         }
     }
 }
