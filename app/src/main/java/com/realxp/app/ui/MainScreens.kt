@@ -1,5 +1,7 @@
 package com.realxp.app.ui
 
+import android.app.Activity
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
@@ -16,7 +18,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -32,10 +33,13 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
 import com.realxp.app.data.Areas
 import com.realxp.app.data.DayStat
 import com.realxp.app.data.Levels
@@ -75,6 +79,27 @@ fun Bar(p: Float, h: Int = 6, color: Color = RX.Accent) {
 
 @Composable
 fun App(store: Store) {
+    val ctx = LocalContext.current
+    val ui = remember { ctx.getSharedPreferences("realxp_ui", Context.MODE_PRIVATE) }
+    remember {
+        RX.dark = ui.getBoolean("dark", false)
+        true
+    }
+    val dark = RX.dark
+    val view = LocalView.current
+    SideEffect {
+        val window = (view.context as? Activity)?.window
+        if (window != null) {
+            val c = WindowCompat.getInsetsController(window, view)
+            c.isAppearanceLightStatusBars = !dark
+            c.isAppearanceLightNavigationBars = !dark
+        }
+    }
+    val toggleDark: () -> Unit = {
+        RX.dark = !RX.dark
+        ui.edit().putBoolean("dark", RX.dark).apply()
+    }
+
     var screen by remember { mutableStateOf(if (store.chosen().isEmpty()) "welcome" else "home") }
     var chosen by remember { mutableStateOf(store.chosen()) }
     var openArea by remember { mutableStateOf<String?>(null) }
@@ -116,7 +141,8 @@ fun App(store: Store) {
                     store.saveChosen(left)
                     chosen = left
                     tick++
-                }
+                },
+                onToggleDark = toggleDark
             )
         }
     }
@@ -215,7 +241,7 @@ fun LevelUpOverlay(area: String, level: Int, gained: Int, onDismiss: () -> Unit)
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF050A1E).copy(alpha = 0.94f * fade.value))
+            .background(RX.Bg.copy(alpha = 0.95f * fade.value))
             .clickable { onDismiss() },
         contentAlignment = Alignment.Center
     ) {
@@ -375,20 +401,20 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(10.dp).background(arenaColor(area), CircleShape))
-                        Spacer(Modifier.width(8.dp))
-                        RankText(area, info.level, 26.sp, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ArenaBadge(area, 46)
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        RankText(area, info.level, 24.sp, fontWeight = FontWeight.Bold)
+                        RankText(
+                            Ranks.title(info.level).uppercase(), info.level, 11.sp,
+                            letterSpacing = 2.sp, fontWeight = FontWeight.Medium
+                        )
                     }
-                    RankText(
-                        Ranks.title(info.level).uppercase(), info.level, 11.sp,
-                        letterSpacing = 2.sp, fontWeight = FontWeight.Medium
-                    )
                 }
-                RankText("LV ${info.level}", info.level, 20.sp, fontWeight = FontWeight.Bold)
+                LevelPill(info.level)
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
             Bar(barP, 5, tone)
             Spacer(Modifier.height(5.dp))
             Text("${info.into} / ${info.need} XP", color = RX.Muted, fontSize = 12.sp)
@@ -427,6 +453,8 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
                         unfocusedTextColor = RX.Text,
                         focusedBorderColor = RX.Accent,
                         unfocusedBorderColor = RX.Line,
+                        focusedContainerColor = RX.Panel,
+                        unfocusedContainerColor = RX.Panel,
                         cursorColor = RX.Accent,
                         focusedLabelColor = RX.Accent,
                         unfocusedLabelColor = RX.Muted
