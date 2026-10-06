@@ -26,29 +26,27 @@ object Levels {
         return LevelInfo(level, rest, need(level))
     }
 
-    fun of(xp: Int): LevelInfo = walk(xp) { 200 + 100 * (it - 1) }
+    fun of(xp: Int): LevelInfo = walk(xp) { 200 + 60 * (it - 1) }
 
-    fun overall(xp: Int): LevelInfo = walk(xp) { 400 + 200 * (it - 1) }
+    fun overall(xp: Int): LevelInfo = walk(xp) { 400 + 120 * (it - 1) }
 }
 
 object Ranks {
     fun title(level: Int): String = when {
         level < 3 -> "Novice"
-        level < 5 -> "Apprentice"
-        level < 8 -> "Adept"
-        level < 12 -> "Skilled"
-        level < 17 -> "Expert"
-        level < 25 -> "Master"
+        level < 6 -> "Apprentice"
+        level < 10 -> "Adept"
+        level < 20 -> "Veteran"
+        level < 30 -> "Elite"
+        level < 40 -> "Master"
+        level < 50 -> "Grandmaster"
         else -> "Legend"
     }
 }
 
-object Sess {
-    const val MIN_SEC = 300
-    const val MAX_SEC = 240 * 60
-}
-
 object Xp {
+    const val DAILY_CAP = 180
+
     private val pts = listOf(
         0.0 to 0.0, 15.0 to 20.0, 30.0 to 45.0,
         60.0 to 100.0, 90.0 to 150.0, 150.0 to 180.0
@@ -67,8 +65,7 @@ object Xp {
     }
 }
 
-data class Running(val area: String, val startMs: Long, val goalMin: Int)
-data class SessionResult(val seconds: Int, val gain: Int, val counted: Boolean)
+data class LogResult(val minutes: Int, val gain: Int)
 data class DayStat(val label: String, val minutes: Int, val isToday: Boolean)
 
 fun formatTime(sec: Int): String {
@@ -114,38 +111,41 @@ class Store(context: Context) {
         return out
     }
 
-    fun running(): Running? {
-        val a = prefs.getString("run_area", null) ?: return null
-        return Running(a, prefs.getLong("run_start", 0L), prefs.getInt("run_goal", 30))
-    }
-
-    fun startSession(area: String, goalMin: Int) {
-        prefs.edit()
-            .putString("run_area", area)
-            .putLong("run_start", System.currentTimeMillis())
-            .putInt("run_goal", goalMin)
-            .apply()
-    }
-
-    fun cancelSession() {
-        prefs.edit().remove("run_area").remove("run_start").remove("run_goal").apply()
-    }
-
-    fun finishSession(): SessionResult? {
-        val r = running() ?: return null
-        val sec = ((System.currentTimeMillis() - r.startMs) / 1000).toInt().coerceIn(0, Sess.MAX_SEC)
-        cancelSession()
-        if (sec < Sess.MIN_SEC) return SessionResult(sec, 0, false)
+    fun logMinutes(area: String, minutes: Int): LogResult {
+        val sec = minutes * 60
         val key = dayKey()
-        val before = prefs.getInt("sec_${r.area}_$key", 0)
+        val before = prefs.getInt("sec_${area}_$key", 0)
         val after = before + sec
         val gain = Xp.forMinutes(after / 60.0) - Xp.forMinutes(before / 60.0)
         prefs.edit()
-            .putInt("sec_${r.area}_$key", after)
-            .putInt("tot_${r.area}", totalSeconds(r.area) + sec)
-            .putInt("cnt_${r.area}", sessionCount(r.area) + 1)
-            .putInt("xp_${r.area}", xp(r.area) + gain)
+            .putInt("sec_${area}_$key", after)
+            .putInt("tot_$area", totalSeconds(area) + sec)
+            .putInt("cnt_$area", sessionCount(area) + 1)
+            .putInt("xp_$area", xp(area) + gain)
+            .putString("last_area", area)
+            .putString("last_key", key)
+            .putInt("last_sec", sec)
+            .putInt("last_gain", gain)
             .apply()
-        return SessionResult(sec, gain, true)
+        return LogResult(minutes, gain)
+    }
+
+    fun undoLast(): Boolean {
+        val area = prefs.getString("last_area", null) ?: return false
+        val key = prefs.getString("last_key", "") ?: ""
+        val sec = prefs.getInt("last_sec", 0)
+        val gain = prefs.getInt("last_gain", 0)
+        val daySec = prefs.getInt("sec_${area}_$key", 0)
+        prefs.edit()
+            .putInt("sec_${area}_$key", (daySec - sec).coerceAtLeast(0))
+            .putInt("tot_$area", (totalSeconds(area) - sec).coerceAtLeast(0))
+            .putInt("cnt_$area", (sessionCount(area) - 1).coerceAtLeast(0))
+            .putInt("xp_$area", (xp(area) - gain).coerceAtLeast(0))
+            .remove("last_area")
+            .remove("last_key")
+            .remove("last_sec")
+            .remove("last_gain")
+            .apply()
+        return true
     }
 }
