@@ -132,7 +132,11 @@ fun App(store: Store) {
                     tick++
                 }
             }
-            else -> LifeHome(
+            "profile" -> {
+                BackHandler { screen = "home" }
+                ProfileScreen(store) { screen = "home" }
+            }
+            else -> HomeHub(
                 store, chosen, tick,
                 onOpen = { openArea = it },
                 onAdd = { screen = "add" },
@@ -142,7 +146,8 @@ fun App(store: Store) {
                     chosen = left
                     tick++
                 },
-                onToggleDark = toggleDark
+                onToggleDark = toggleDark,
+                onProfile = { screen = "profile" }
             )
         }
     }
@@ -222,6 +227,35 @@ fun WeekChart(days: List<DayStat>, tone: Color) {
 }
 
 @Composable
+fun TabBar(tab: Int, onSelect: (Int) -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        listOf("Overview", "History").forEachIndexed { i, label ->
+            val on = tab == i
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onSelect(i) },
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    label,
+                    color = if (on) RX.Accent else RX.Muted,
+                    fontSize = 14.sp,
+                    fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                    modifier = Modifier.padding(vertical = 10.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .background(if (on) RX.Accent else RX.Line)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun LevelUpOverlay(area: String, level: Int, gained: Int, onDismiss: () -> Unit) {
     val pop = remember { Animatable(0.3f) }
     val wave = remember { Animatable(0f) }
@@ -282,6 +316,7 @@ fun LevelUpOverlay(area: String, level: Int, gained: Int, onDismiss: () -> Unit)
 fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
     var xp by remember { mutableStateOf(store.xp(area)) }
     var rev by remember { mutableStateOf(0) }
+    var tab by remember { mutableStateOf(0) }
     var input by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
     var pendingMin by remember { mutableStateOf<Int?>(null) }
@@ -300,6 +335,8 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
     val totalSec = remember(rev) { store.totalSeconds(area) }
     val count = remember(rev) { store.sessionCount(area) }
     val week = remember(rev) { store.week(area) }
+    val heat = remember(rev) { store.heat(16, area) }
+    val hist = remember(rev) { store.history(area, 100) }
     val todayMin = todaySec / 60.0
     val xpToday = Xp.forMinutes(todayMin)
 
@@ -419,101 +456,125 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
             Spacer(Modifier.height(5.dp))
             Text("${info.into} / ${info.need} XP", color = RX.Muted, fontSize = 12.sp)
 
-            Spacer(Modifier.height(26.dp))
-            Text("LOG YOUR WORK", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
-            Spacer(Modifier.height(10.dp))
-            Row(modifier = Modifier.fillMaxWidth()) {
-                listOf(15, 30, 60, 90).forEachIndexed { i, m ->
-                    if (i > 0) Spacer(Modifier.width(8.dp))
-                    QuickLog(
-                        m,
-                        if (fits(m)) "+${gainFor(m)} XP" else "—",
-                        Modifier.weight(1f)
-                    ) { request(m) }
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = { v ->
-                        input = v.filter { it.isDigit() }.take(4)
-                        error = ""
-                    },
-                    label = { Text("Other (min)") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.weight(1f),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = RX.Text,
-                        unfocusedTextColor = RX.Text,
-                        focusedBorderColor = RX.Accent,
-                        unfocusedBorderColor = RX.Line,
-                        focusedContainerColor = RX.Panel,
-                        unfocusedContainerColor = RX.Panel,
-                        cursorColor = RX.Accent,
-                        focusedLabelColor = RX.Accent,
-                        unfocusedLabelColor = RX.Muted
-                    )
-                )
-                Spacer(Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .width(84.dp)
-                        .height(56.dp)
-                        .background(RX.Button, RoundedCornerShape(12.dp))
-                        .clickable {
-                            val m = input.toIntOrNull()
-                            if (m == null || m < 1) {
-                                error = "Type how many minutes you worked."
-                            } else if (!fits(m)) {
-                                error = "A day only has 24 hours."
-                            } else {
-                                request(m)
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("LOG", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                when {
-                    error.isNotEmpty() -> error
-                    typed != null && typed >= 1 && fits(typed) -> "+${gainFor(typed)} XP for ${typed}m"
-                    typed != null && typed >= 1 -> "A day only has 24 hours."
-                    else -> "Type any amount, for example 5."
-                },
-                color = if (error.isNotEmpty()) Danger else RX.Muted,
-                fontSize = 12.sp
-            )
-
-            Spacer(Modifier.height(22.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("TODAY'S XP", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
-                Text("+$xpToday XP", color = tone, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            }
-
             Spacer(Modifier.height(16.dp))
-            Row(modifier = Modifier.fillMaxWidth()) {
-                StatBox("TODAY", formatTime(todaySec), Modifier.weight(1f))
-                Spacer(Modifier.width(8.dp))
-                StatBox("TOTAL", formatTime(totalSec), Modifier.weight(1f))
-                Spacer(Modifier.width(8.dp))
-                StatBox("LOGS", "$count", Modifier.weight(1f))
+            TabBar(tab) { tab = it }
+            Spacer(Modifier.height(20.dp))
+
+            if (tab == 0) {
+                Text("LOG YOUR WORK", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
+                Spacer(Modifier.height(10.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    listOf(15, 30, 60, 90).forEachIndexed { i, m ->
+                        if (i > 0) Spacer(Modifier.width(8.dp))
+                        QuickLog(
+                            m,
+                            if (fits(m)) "+${gainFor(m)} XP" else "—",
+                            Modifier.weight(1f)
+                        ) { request(m) }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { v ->
+                            input = v.filter { it.isDigit() }.take(4)
+                            error = ""
+                        },
+                        label = { Text("Other (min)") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = RX.Text,
+                            unfocusedTextColor = RX.Text,
+                            focusedBorderColor = RX.Accent,
+                            unfocusedBorderColor = RX.Line,
+                            focusedContainerColor = RX.Panel,
+                            unfocusedContainerColor = RX.Panel,
+                            cursorColor = RX.Accent,
+                            focusedLabelColor = RX.Accent,
+                            unfocusedLabelColor = RX.Muted
+                        )
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .width(84.dp)
+                            .height(56.dp)
+                            .background(RX.Button, RoundedCornerShape(12.dp))
+                            .clickable {
+                                val m = input.toIntOrNull()
+                                if (m == null || m < 1) {
+                                    error = "Type how many minutes you worked."
+                                } else if (!fits(m)) {
+                                    error = "A day only has 24 hours."
+                                } else {
+                                    request(m)
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("LOG", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    when {
+                        error.isNotEmpty() -> error
+                        typed != null && typed >= 1 && fits(typed) -> "+${gainFor(typed)} XP for ${typed}m"
+                        typed != null && typed >= 1 -> "A day only has 24 hours."
+                        else -> "Type any amount, for example 5."
+                    },
+                    color = if (error.isNotEmpty()) Danger else RX.Muted,
+                    fontSize = 12.sp
+                )
+
+                Spacer(Modifier.height(22.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("TODAY'S XP", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
+                    Text("+$xpToday XP", color = tone, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    StatBox("TODAY", formatTime(todaySec), Modifier.weight(1f))
+                    Spacer(Modifier.width(8.dp))
+                    StatBox("TOTAL", formatTime(totalSec), Modifier.weight(1f))
+                    Spacer(Modifier.width(8.dp))
+                    StatBox("LOGS", "$count", Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(22.dp))
+                Text("LAST 7 DAYS", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
+                Spacer(Modifier.height(10.dp))
+                WeekChart(week, tone)
+                Spacer(Modifier.height(22.dp))
+                Text("LAST 16 WEEKS", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
+                Spacer(Modifier.height(12.dp))
+                Heatmap(heat)
+                Spacer(Modifier.height(8.dp))
+                HeatLegend()
+            } else {
+                Text(
+                    "YOUR LOGS  ·  ${hist.size}",
+                    color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp
+                )
+                Spacer(Modifier.height(12.dp))
+                if (hist.isEmpty()) {
+                    Text(
+                        "No logs yet. Log your first session in Overview.",
+                        color = RX.Muted, fontSize = 14.sp
+                    )
+                }
+                hist.forEach { e -> HistoryRow(e) }
             }
-            Spacer(Modifier.height(22.dp))
-            Text("LAST 7 DAYS", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
-            Spacer(Modifier.height(10.dp))
-            WeekChart(week, tone)
             Spacer(Modifier.height(32.dp))
         }
 
