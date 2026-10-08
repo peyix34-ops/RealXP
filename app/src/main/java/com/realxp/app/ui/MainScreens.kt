@@ -3,6 +3,7 @@ package com.realxp.app.ui
 import android.app.Activity
 import android.content.Context
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -11,7 +12,10 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,7 +37,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -77,6 +83,13 @@ fun Bar(p: Float, h: Int = 6, color: Color = RX.Accent) {
     }
 }
 
+private fun depthOf(route: String): Int = when (route) {
+    "welcome" -> 0
+    "pick" -> 1
+    "home" -> 2
+    else -> 3
+}
+
 @Composable
 fun App(store: Store) {
     val ctx = LocalContext.current
@@ -106,20 +119,36 @@ fun App(store: Store) {
     var tick by remember { mutableStateOf(0) }
 
     val area = openArea
-    if (area != null) {
-        BackHandler { openArea = null; tick++ }
-        AreaScreen(store, area) { openArea = null; tick++ }
-    } else {
-        when (screen) {
-            "welcome" -> WelcomeScreen(onStart = { screen = "pick" })
-            "pick" -> ArenaPicker(
+    val route = if (area != null) "area:$area" else screen
+
+    AnimatedContent(
+        targetState = route,
+        transitionSpec = {
+            val forward = depthOf(targetState) >= depthOf(initialState)
+            val enter = slideInHorizontally(tween(340, easing = FastOutSlowInEasing)) { w ->
+                if (forward) w / 5 else -w / 5
+            } + fadeIn(tween(340))
+            val exit = slideOutHorizontally(tween(340, easing = FastOutSlowInEasing)) { w ->
+                if (forward) -w / 5 else w / 5
+            } + fadeOut(tween(220))
+            enter togetherWith exit
+        },
+        label = "route"
+    ) { r ->
+        when {
+            r.startsWith("area:") -> {
+                BackHandler { openArea = null; tick++ }
+                AreaScreen(store, r.removePrefix("area:")) { openArea = null; tick++ }
+            }
+            r == "welcome" -> WelcomeScreen(onStart = { screen = "pick" })
+            r == "pick" -> ArenaPicker(
                 Areas.all, "Pick everything\nyou want to level up.", "CONTINUE", null
             ) { list ->
                 store.saveChosen(list)
                 chosen = list
                 screen = "home"
             }
-            "add" -> {
+            r == "add" -> {
                 BackHandler { screen = "home" }
                 ArenaPicker(
                     Areas.all.filter { it !in chosen },
@@ -132,7 +161,7 @@ fun App(store: Store) {
                     tick++
                 }
             }
-            "profile" -> {
+            r == "profile" -> {
                 BackHandler { screen = "home" }
                 ProfileScreen(store) { screen = "home" }
             }
@@ -157,9 +186,9 @@ fun App(store: Store) {
 fun QuickLog(minutes: Int, gainText: String, modifier: Modifier, onClick: () -> Unit) {
     Column(
         modifier = modifier
+            .bounceClick { onClick() }
             .background(RX.Panel, RoundedCornerShape(12.dp))
             .border(1.dp, RX.Line, RoundedCornerShape(12.dp))
-            .clickable { onClick() }
             .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -314,6 +343,7 @@ fun LevelUpOverlay(area: String, level: Int, gained: Int, onDismiss: () -> Unit)
 
 @Composable
 fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
     var xp by remember { mutableStateOf(store.xp(area)) }
     var rev by remember { mutableStateOf(0) }
     var tab by remember { mutableStateOf(0) }
@@ -326,10 +356,12 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
     var bannerId by remember { mutableStateOf(0) }
     var levelUp by remember { mutableStateOf<Int?>(null) }
     var gained by remember { mutableStateOf(1) }
+    var popText by remember { mutableStateOf("") }
+    var popId by remember { mutableStateOf(0) }
 
     val info = Levels.of(xp)
     val tone = RankColors.tone(info.level)
-    val barP = animatedProgress(info.into.toFloat() / info.need, 900)
+    val barP = animatedXpBar(info.level, info.into.toFloat() / info.need)
 
     val todaySec = remember(rev) { store.secondsToday(area) }
     val totalSec = remember(rev) { store.totalSeconds(area) }
@@ -339,6 +371,7 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
     val hist = remember(rev) { store.history(area, 100) }
     val todayMin = todaySec / 60.0
     val xpToday = Xp.forMinutes(todayMin)
+    val xpTodayShown = animatedCount(xpToday)
 
     val gainFor: (Int) -> Int = { m -> Xp.forMinutes(todayMin + m) - Xp.forMinutes(todayMin) }
     val fits: (Int) -> Boolean = { m -> todayMin + m <= Xp.DAY_MINUTES }
@@ -371,6 +404,11 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
             rev++
             input = ""
             error = ""
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            if (res.gain > 0) {
+                popText = "+${res.gain} XP"
+                popId++
+            }
             val after = Levels.of(xp).level
             if (after > before) {
                 gained = after - before
@@ -460,123 +498,136 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
             TabBar(tab) { tab = it }
             Spacer(Modifier.height(20.dp))
 
-            if (tab == 0) {
-                Text("LOG YOUR WORK", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
-                Spacer(Modifier.height(10.dp))
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    listOf(15, 30, 60, 90).forEachIndexed { i, m ->
-                        if (i > 0) Spacer(Modifier.width(8.dp))
-                        QuickLog(
-                            m,
-                            if (fits(m)) "+${gainFor(m)} XP" else "—",
-                            Modifier.weight(1f)
-                        ) { request(m) }
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = input,
-                        onValueChange = { v ->
-                            input = v.filter { it.isDigit() }.take(4)
-                            error = ""
-                        },
-                        label = { Text("Other (min)") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = RX.Text,
-                            unfocusedTextColor = RX.Text,
-                            focusedBorderColor = RX.Accent,
-                            unfocusedBorderColor = RX.Line,
-                            focusedContainerColor = RX.Panel,
-                            unfocusedContainerColor = RX.Panel,
-                            cursorColor = RX.Accent,
-                            focusedLabelColor = RX.Accent,
-                            unfocusedLabelColor = RX.Muted
-                        )
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .width(84.dp)
-                            .height(56.dp)
-                            .background(RX.Button, RoundedCornerShape(12.dp))
-                            .clickable {
-                                val m = input.toIntOrNull()
-                                if (m == null || m < 1) {
-                                    error = "Type how many minutes you worked."
-                                } else if (!fits(m)) {
-                                    error = "A day only has 24 hours."
-                                } else {
-                                    request(m)
-                                }
+            AnimatedContent(
+                targetState = tab,
+                transitionSpec = { fadeIn(tween(240)) togetherWith fadeOut(tween(120)) },
+                label = "tab"
+            ) { t ->
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    if (t == 0) {
+                        Text("LOG YOUR WORK", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
+                        Spacer(Modifier.height(10.dp))
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            listOf(15, 30, 60, 90).forEachIndexed { i, m ->
+                                if (i > 0) Spacer(Modifier.width(8.dp))
+                                QuickLog(
+                                    m,
+                                    if (fits(m)) "+${gainFor(m)} XP" else "—",
+                                    Modifier.weight(1f)
+                                ) { request(m) }
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = input,
+                                onValueChange = { v ->
+                                    input = v.filter { it.isDigit() }.take(4)
+                                    error = ""
+                                },
+                                label = { Text("Other (min)") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = RX.Text,
+                                    unfocusedTextColor = RX.Text,
+                                    focusedBorderColor = RX.Accent,
+                                    unfocusedBorderColor = RX.Line,
+                                    focusedContainerColor = RX.Panel,
+                                    unfocusedContainerColor = RX.Panel,
+                                    cursorColor = RX.Accent,
+                                    focusedLabelColor = RX.Accent,
+                                    unfocusedLabelColor = RX.Muted
+                                )
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .bounceClick {
+                                        val m = input.toIntOrNull()
+                                        if (m == null || m < 1) {
+                                            error = "Type how many minutes you worked."
+                                        } else if (!fits(m)) {
+                                            error = "A day only has 24 hours."
+                                        } else {
+                                            request(m)
+                                        }
+                                    }
+                                    .width(84.dp)
+                                    .height(56.dp)
+                                    .background(RX.Button, RoundedCornerShape(12.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("LOG", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            when {
+                                error.isNotEmpty() -> error
+                                typed != null && typed >= 1 && fits(typed) -> "+${gainFor(typed)} XP for ${typed}m"
+                                typed != null && typed >= 1 -> "A day only has 24 hours."
+                                else -> "Type any amount, for example 5."
                             },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("LOG", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                            color = if (error.isNotEmpty()) Danger else RX.Muted,
+                            fontSize = 12.sp
+                        )
+
+                        Spacer(Modifier.height(22.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("TODAY'S XP", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
+                            Text("+$xpTodayShown XP", color = tone, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            StatBox("TODAY", formatTime(todaySec), Modifier.weight(1f))
+                            Spacer(Modifier.width(8.dp))
+                            StatBox("TOTAL", formatTime(totalSec), Modifier.weight(1f))
+                            Spacer(Modifier.width(8.dp))
+                            StatBox("LOGS", "$count", Modifier.weight(1f))
+                        }
+                        Spacer(Modifier.height(22.dp))
+                        Text("LAST 7 DAYS", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
+                        Spacer(Modifier.height(10.dp))
+                        WeekChart(week, tone)
+                        Spacer(Modifier.height(22.dp))
+                        Text("LAST 16 WEEKS", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
+                        Spacer(Modifier.height(12.dp))
+                        Heatmap(heat)
+                        Spacer(Modifier.height(8.dp))
+                        HeatLegend()
+                    } else {
+                        Text(
+                            "YOUR LOGS  ·  ${hist.size}",
+                            color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        if (hist.isEmpty()) {
+                            Text(
+                                "No logs yet. Log your first session in Overview.",
+                                color = RX.Muted, fontSize = 14.sp
+                            )
+                        }
+                        hist.forEach { e -> HistoryRow(e) }
                     }
                 }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    when {
-                        error.isNotEmpty() -> error
-                        typed != null && typed >= 1 && fits(typed) -> "+${gainFor(typed)} XP for ${typed}m"
-                        typed != null && typed >= 1 -> "A day only has 24 hours."
-                        else -> "Type any amount, for example 5."
-                    },
-                    color = if (error.isNotEmpty()) Danger else RX.Muted,
-                    fontSize = 12.sp
-                )
-
-                Spacer(Modifier.height(22.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("TODAY'S XP", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
-                    Text("+$xpToday XP", color = tone, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                }
-
-                Spacer(Modifier.height(16.dp))
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    StatBox("TODAY", formatTime(todaySec), Modifier.weight(1f))
-                    Spacer(Modifier.width(8.dp))
-                    StatBox("TOTAL", formatTime(totalSec), Modifier.weight(1f))
-                    Spacer(Modifier.width(8.dp))
-                    StatBox("LOGS", "$count", Modifier.weight(1f))
-                }
-                Spacer(Modifier.height(22.dp))
-                Text("LAST 7 DAYS", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
-                Spacer(Modifier.height(10.dp))
-                WeekChart(week, tone)
-                Spacer(Modifier.height(22.dp))
-                Text("LAST 16 WEEKS", color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
-                Spacer(Modifier.height(12.dp))
-                Heatmap(heat)
-                Spacer(Modifier.height(8.dp))
-                HeatLegend()
-            } else {
-                Text(
-                    "YOUR LOGS  ·  ${hist.size}",
-                    color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp
-                )
-                Spacer(Modifier.height(12.dp))
-                if (hist.isEmpty()) {
-                    Text(
-                        "No logs yet. Log your first session in Overview.",
-                        color = RX.Muted, fontSize = 14.sp
-                    )
-                }
-                hist.forEach { e -> HistoryRow(e) }
             }
             Spacer(Modifier.height(32.dp))
         }
+
+        FloatingGain(
+            popText, popId,
+            Modifier.align(Alignment.TopCenter).padding(top = 150.dp)
+        )
 
         AnimatedVisibility(
             visible = bannerText != null,
