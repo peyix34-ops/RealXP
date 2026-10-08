@@ -1,5 +1,11 @@
 package com.realxp.app.ui
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,6 +31,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -63,6 +70,7 @@ fun heatLevel(min: Int): Int = when {
 fun Heatmap(cols: List<List<Int?>>) {
     val weeks = cols.size
     val gap = 3.dp
+    val prog = animatedProgress(1f, 1500)
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val cell = (maxWidth - gap * (weeks - 1)) / weeks
         val h = cell * 7 + gap * 6
@@ -74,6 +82,8 @@ fun Heatmap(cols: List<List<Int?>>) {
             for (w in 0 until weeks) {
                 for (r in 0 until 7) {
                     val m = cols[w][r] ?: continue
+                    val t = (prog * (weeks + 5) - w).coerceIn(0f, 1f)
+                    if (t <= 0f) continue
                     val color = when (heatLevel(m)) {
                         0 -> base.copy(alpha = 0.7f)
                         1 -> tint.copy(alpha = 0.28f)
@@ -81,10 +91,12 @@ fun Heatmap(cols: List<List<Int?>>) {
                         3 -> tint.copy(alpha = 0.75f)
                         else -> tint
                     }
+                    val s = c * (0.4f + 0.6f * t)
+                    val off = (c - s) / 2f
                     drawRoundRect(
-                        color = color,
-                        topLeft = Offset(w * (c + g), r * (c + g)),
-                        size = Size(c, c),
+                        color = color.copy(alpha = color.alpha * t),
+                        topLeft = Offset(w * (c + g) + off, r * (c + g) + off),
+                        size = Size(s, s),
                         cornerRadius = CornerRadius(3.dp.toPx())
                     )
                 }
@@ -143,13 +155,22 @@ fun HistoryRow(e: LogEntry) {
 
 @Composable
 fun StreakPill(days: Int) {
+    val pulse by rememberInfiniteTransition(label = "flame").animateFloat(
+        initialValue = 1f,
+        targetValue = 1.18f,
+        animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "flameValue"
+    )
     Row(
         modifier = Modifier
             .background(Flame.copy(alpha = 0.12f), RoundedCornerShape(50))
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Outlined.LocalFireDepartment, null, tint = Flame, modifier = Modifier.size(16.dp))
+        Icon(
+            Icons.Outlined.LocalFireDepartment, null, tint = Flame,
+            modifier = Modifier.size(16.dp).scale(pulse)
+        )
         Spacer(Modifier.width(6.dp))
         Text(
             if (days == 1) "1 day streak" else "$days day streak",
@@ -162,10 +183,10 @@ fun StreakPill(days: Int) {
 fun RoundIconButton(icon: ImageVector, onClick: () -> Unit) {
     Box(
         modifier = Modifier
+            .bounceClick { onClick() }
             .size(38.dp)
             .background(RX.Panel, CircleShape)
-            .border(1.dp, RX.Line, CircleShape)
-            .clickable { onClick() },
+            .border(1.dp, RX.Line, CircleShape),
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, null, tint = RX.Muted, modifier = Modifier.size(20.dp))
@@ -188,6 +209,7 @@ fun HomeHub(
     val streak = remember(tick) { store.streak() }
     val info = Levels.overall(total)
     val p = animatedProgress(info.into.toFloat() / info.need, 1400)
+    val intoShown = countUp(info.into, 1200)
     var editing by remember { mutableStateOf(false) }
     var toRemove by remember { mutableStateOf<String?>(null) }
     var showSettings by remember { mutableStateOf(false) }
@@ -312,7 +334,7 @@ fun HomeHub(
         }
         Spacer(Modifier.height(10.dp))
         Text(
-            "${info.into} / ${info.need} XP   ·   $invested invested",
+            "$intoShown / ${info.need} XP   ·   $invested invested",
             color = RX.Muted, fontSize = 12.sp
         )
         if (streak > 0) {
@@ -335,14 +357,18 @@ fun HomeHub(
             }
         }
         Spacer(Modifier.height(10.dp))
-        cells.chunked(2).forEach { row ->
+        cells.chunked(2).forEachIndexed { r, row ->
             Row(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
-                row.forEachIndexed { i, name ->
-                    if (i > 0) Spacer(Modifier.width(10.dp))
+                row.forEachIndexed { c, name ->
+                    if (c > 0) Spacer(Modifier.width(10.dp))
+                    val idx = r * 2 + c
                     if (name == null) {
-                        AddCell(Modifier.weight(1f)) { onAdd() }
+                        AddCell(Modifier.weight(1f).staggerIn(idx)) { onAdd() }
                     } else {
-                        ArenaCell(name, store, tick, editing, chosen.size > 1, Modifier.weight(1f)) {
+                        ArenaCell(
+                            name, store, tick, editing, chosen.size > 1,
+                            Modifier.weight(1f).staggerIn(idx)
+                        ) {
                             if (editing) {
                                 if (chosen.size > 1) toRemove = name
                             } else {
@@ -398,6 +424,8 @@ fun ProfileScreen(store: Store, onBack: () -> Unit) {
     val time = remember { formatTime(store.allSeconds()) }
     val logs = remember { store.totalLogs() }
     val heat = remember { store.heat(16, null) }
+    val totalShown = countUp(total, 1100)
+    val logsShown = countUp(logs, 1100)
 
     Column(
         modifier = Modifier
@@ -444,24 +472,24 @@ fun ProfileScreen(store: Store, onBack: () -> Unit) {
             StatCard(
                 Icons.Outlined.LocalFireDepartment, "Current Streak",
                 if (streak == 1) "1 day" else "$streak days",
-                "Best: $best", Flame, Modifier.weight(1f)
+                "Best: $best", Flame, Modifier.weight(1f).staggerIn(0)
             )
             Spacer(Modifier.width(10.dp))
             StatCard(
-                Icons.Outlined.EmojiEvents, "Total XP", "$total",
-                null, RankColors.gold, Modifier.weight(1f)
+                Icons.Outlined.EmojiEvents, "Total XP", "$totalShown",
+                null, RankColors.gold, Modifier.weight(1f).staggerIn(1)
             )
         }
         Spacer(Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             StatCard(
                 Icons.Outlined.Schedule, "Time Invested", time,
-                null, RX.Accent, Modifier.weight(1f)
+                null, RX.Accent, Modifier.weight(1f).staggerIn(2)
             )
             Spacer(Modifier.width(10.dp))
             StatCard(
-                Icons.Outlined.BarChart, "Total Logs", "$logs",
-                null, RX.Accent, Modifier.weight(1f)
+                Icons.Outlined.BarChart, "Total Logs", "$logsShown",
+                null, RX.Accent, Modifier.weight(1f).staggerIn(3)
             )
         }
 
