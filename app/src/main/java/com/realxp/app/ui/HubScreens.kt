@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -194,19 +195,36 @@ fun RoundIconButton(icon: ImageVector, onClick: () -> Unit) {
 }
 
 @Composable
+fun DialogButton(label: String, color: Color, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .border(1.dp, RX.Line, RoundedCornerShape(12.dp))
+            .clickable { onClick() }
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = color, fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
 fun HomeHub(
     store: Store,
     chosen: List<String>,
     tick: Int,
     onOpen: (String) -> Unit,
     onAdd: () -> Unit,
-    onRemove: (String) -> Unit,
+    onRemove: (String, Boolean) -> Unit,
     onToggleDark: () -> Unit,
-    onProfile: () -> Unit
+    onProfile: () -> Unit,
+    onReport: (Int, Int) -> Unit
 ) {
     val total = remember(tick) { store.totalXp() }
     val invested = remember(tick) { formatTime(store.allSeconds()) }
     val streak = remember(tick) { store.streak() }
+    val pending = remember(tick) { store.pendingReport() }
     val info = Levels.overall(total)
     val p = animatedProgress(info.into.toFloat() / info.need, 1400)
     val intoShown = countUp(info.into, 1200)
@@ -220,17 +238,25 @@ fun HomeHub(
             onDismissRequest = { toRemove = null },
             containerColor = RX.Panel,
             title = { Text("Remove $rm?", color = RX.Text) },
-            text = { Text("Your XP is kept. You can add it back anytime.", color = RX.Muted) },
-            confirmButton = {
-                TextButton(onClick = { toRemove = null; onRemove(rm) }) {
-                    Text("Remove", color = Danger)
+            text = {
+                Column {
+                    Text(
+                        "Keep your progress hidden, or erase it for good?",
+                        color = RX.Muted, fontSize = 14.sp
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    DialogButton("Remove, keep progress", RX.Accent) {
+                        toRemove = null
+                        onRemove(rm, false)
+                    }
+                    DialogButton("Remove and erase progress", Danger) {
+                        toRemove = null
+                        onRemove(rm, true)
+                    }
+                    DialogButton("Cancel", RX.Muted) { toRemove = null }
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { toRemove = null }) {
-                    Text("Cancel", color = RX.Muted)
-                }
-            }
+            confirmButton = {}
         )
     }
 
@@ -341,6 +367,13 @@ fun HomeHub(
             Spacer(Modifier.height(10.dp))
             StreakPill(streak)
         }
+        if (pending != null) {
+            Spacer(Modifier.height(16.dp))
+            ReportCard(
+                "${MONTHS[pending.second]} report is ready",
+                "See how your month went", true
+            ) { onReport(pending.first, pending.second) }
+        }
         Spacer(Modifier.height(22.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -415,7 +448,7 @@ fun StatCard(
 }
 
 @Composable
-fun ProfileScreen(store: Store, onBack: () -> Unit) {
+fun ProfileScreen(store: Store, onBack: () -> Unit, onReports: () -> Unit) {
     val total = remember { store.totalXp() }
     val info = Levels.overall(total)
     val p = animatedProgress(info.into.toFloat() / info.need, 1000)
@@ -492,6 +525,9 @@ fun ProfileScreen(store: Store, onBack: () -> Unit) {
                 null, RX.Accent, Modifier.weight(1f).staggerIn(3)
             )
         }
+
+        Spacer(Modifier.height(16.dp))
+        ReportCard("Monthly Reports", "See every month at a glance", false) { onReports() }
 
         Spacer(Modifier.height(24.dp))
         Text("ACTIVITY  ·  LAST 16 WEEKS", color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
