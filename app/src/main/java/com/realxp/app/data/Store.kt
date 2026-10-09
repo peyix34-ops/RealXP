@@ -4,6 +4,7 @@ import android.content.Context
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import kotlin.random.Random
 
 object Areas {
     val all = listOf(
@@ -69,12 +70,31 @@ object Xp {
 data class LogResult(val minutes: Int, val gain: Int, val ok: Boolean, val leftMin: Int)
 data class DayStat(val label: String, val minutes: Int, val isToday: Boolean)
 data class LogEntry(val ts: Long, val area: String, val minutes: Int, val gain: Int)
+data class ArenaShare(val area: String, val minutes: Int, val xp: Int)
+
+data class MonthReport(
+    val year: Int,
+    val month: Int,
+    val days: Int,
+    val firstWeekday: Int,
+    val dayMinutes: List<Int>,
+    val arenas: List<ArenaShare>,
+    val totalMinutes: Int,
+    val totalXp: Int,
+    val activeDays: Int,
+    val bestDay: Int,
+    val bestMinutes: Int,
+    val longestStreak: Int,
+    val prevMinutes: Int
+)
 
 fun formatTime(sec: Int): String {
     val h = sec / 3600
     val m = (sec % 3600) / 60
     return if (h > 0) "${h}h ${m}m" else "${m}m"
 }
+
+fun monthKey(year: Int, month: Int): String = "%04d-%02d".format(year, month + 1)
 
 class Store(context: Context) {
     private val prefs = context.getSharedPreferences("realxp2", Context.MODE_PRIVATE)
@@ -99,19 +119,20 @@ class Store(context: Context) {
     fun secondsOn(area: String, back: Int): Int = prefs.getInt("s2_${area}_${dayKey(back)}", 0)
     fun totalSeconds(area: String): Int = prefs.getInt("tot_$area", 0)
     fun sessionCount(area: String): Int = prefs.getInt("cnt_$area", 0)
-    fun allSeconds(): Int = Areas.all.sumOf { totalSeconds(it) }
-    fun totalXp(): Int = Areas.all.sumOf { xp(it) }
-    fun totalLogs(): Int = Areas.all.sumOf { sessionCount(it) }
+    fun allSeconds(): Int = chosen().sumOf { totalSeconds(it) }
+    fun totalXp(): Int = chosen().sumOf { xp(it) }
+    fun totalLogs(): Int = chosen().sumOf { sessionCount(it) }
 
-    fun daySeconds(back: Int): Int {
+    private fun daySecondsOf(back: Int, areas: List<String>): Int {
         val key = dayKey(back)
-        return Areas.all.sumOf { prefs.getInt("s2_${it}_$key", 0) }
+        return areas.sumOf { prefs.getInt("s2_${it}_$key", 0) }
     }
 
     fun streak(): Int {
-        var back = if (daySeconds(0) > 0) 0 else 1
+        val ar = chosen()
+        var back = if (daySecondsOf(0, ar) > 0) 0 else 1
         var n = 0
-        while (back < 800 && daySeconds(back) > 0) {
+        while (back < 800 && daySecondsOf(back, ar) > 0) {
             n++
             back++
         }
@@ -119,10 +140,11 @@ class Store(context: Context) {
     }
 
     fun bestStreak(): Int {
+        val ar = chosen()
         var best = 0
         var run = 0
         for (back in 364 downTo 0) {
-            if (daySeconds(back) > 0) {
+            if (daySecondsOf(back, ar) > 0) {
                 run++
                 if (run > best) best = run
             } else {
@@ -133,6 +155,7 @@ class Store(context: Context) {
     }
 
     fun heat(weeks: Int, area: String?): List<List<Int?>> {
+        val ar = chosen()
         val c = Calendar.getInstance()
         val todayIdx = (c.get(Calendar.DAY_OF_WEEK) + 5) % 7
         val cols = mutableListOf<List<Int?>>()
@@ -142,7 +165,7 @@ class Store(context: Context) {
                 val back = (weeks - 1 - w) * 7 + (todayIdx - r)
                 col.add(
                     if (back < 0) null
-                    else (if (area == null) daySeconds(back) else secondsOn(area, back)) / 60
+                    else (if (area == null) daySecondsOf(back, ar) else secondsOn(area, back)) / 60
                 )
             }
             cols.add(col)
@@ -237,5 +260,159 @@ class Store(context: Context) {
             writeHist(h)
         }
         return true
+    }
+
+    fun eraseArea(area: String) {
+        val e = prefs.edit()
+        for (k in prefs.all.keys) {
+            if (k == "xp_$area" || k == "tot_$area" || k == "cnt_$area" || k.startsWith("s2_${area}_")) {
+                e.remove(k)
+            }
+        }
+        if (prefs.getString("last_area", null) == area) {
+            e.remove("last_area").remove("last_key").remove("last_sec").remove("last_gain")
+        }
+        e.apply()
+        writeHist(readHist().filter { it.area != area })
+    }
+
+    fun honestyDue(): Boolean {
+        val last = prefs.getLong("honest_last", 0L)
+        val now = System.currentTimeMillis()
+        if (now - last < 8 * 3600 * 1000L) return false
+        return Random.nextInt(10) == 0
+    }
+
+    fun markHonesty() {
+        prefs.edit().putLong("honest_last", System.currentTimeMillis()).apply()
+    }
+
+    fun reportSeen(): String = prefs.getString("report_seen", "") ?: ""
+
+    fun markReportSeen(key: String) {
+        prefs.edit().putString("report_seen", key).apply()
+    }
+
+    private fun monthDayMinutes(year: Int, month: Int, areas: List<String>): List<Int> {
+        val c = Calendar.getInstance()
+        c.clear()
+        c.set(year, month, 1)
+        val days = c.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val out = MutableList(days) { 0 }
+        for (d in 1..days) {
+            c.set(year, month, d)
+            val key = fmt.format(c.time)
+            var s = 0
+            for (a in areas) s += prefs.getInt("s2_${a}_$key", 0)
+            out[d - 1] = s / 60
+        }
+        return out
+    }
+
+    fun pendingReport(): Pair<Int, Int>? {
+        val now = Calendar.getInstance()
+        var y = now.get(Calendar.YEAR)
+        var m = now.get(Calendar.MONTH) - 1
+        if (m < 0) {
+            m = 11
+            y--
+        }
+        if (reportSeen() == monthKey(y, m)) return null
+        val total = monthDayMinutes(y, m, chosen()).sum()
+        return if (total > 0) Pair(y, m) else null
+    }
+
+    fun reportMonths(): List<Pair<Int, Int>> {
+        val ar = chosen().toSet()
+        var minDate: String? = null
+        for (k in prefs.all.keys) {
+            if (k.startsWith("s2_") && k.length > 14) {
+                val date = k.takeLast(10)
+                val area = k.removePrefix("s2_").dropLast(11)
+                if (area in ar) {
+                    val cur = minDate
+                    if (cur == null || date < cur) minDate = date
+                }
+            }
+        }
+        val now = Calendar.getInstance()
+        val curY = now.get(Calendar.YEAR)
+        val curM = now.get(Calendar.MONTH)
+        var yy = curY
+        var mm = curM
+        val md = minDate
+        if (md != null) {
+            yy = md.substring(0, 4).toIntOrNull() ?: curY
+            mm = (md.substring(5, 7).toIntOrNull() ?: (curM + 1)) - 1
+        }
+        val out = mutableListOf<Pair<Int, Int>>()
+        while (yy < curY || (yy == curY && mm <= curM)) {
+            out.add(Pair(yy, mm))
+            mm++
+            if (mm > 11) {
+                mm = 0
+                yy++
+            }
+        }
+        if (out.isEmpty()) out.add(Pair(curY, curM))
+        return out.reversed()
+    }
+
+    fun report(year: Int, month: Int): MonthReport {
+        val ar = chosen()
+        val c = Calendar.getInstance()
+        c.clear()
+        c.set(year, month, 1)
+        val days = c.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val firstWd = (c.get(Calendar.DAY_OF_WEEK) + 5) % 7
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val dayMin = MutableList(days) { 0 }
+        val areaMin = HashMap<String, Int>()
+        val areaXp = HashMap<String, Int>()
+        for (d in 1..days) {
+            c.set(year, month, d)
+            val key = fmt.format(c.time)
+            var total = 0
+            for (a in ar) {
+                val s = prefs.getInt("s2_${a}_$key", 0)
+                if (s > 0) {
+                    total += s / 60
+                    areaMin[a] = (areaMin[a] ?: 0) + s / 60
+                    areaXp[a] = (areaXp[a] ?: 0) + Xp.forMinutes(s / 60.0)
+                }
+            }
+            dayMin[d - 1] = total
+        }
+        val shares = ar
+            .filter { (areaMin[it] ?: 0) > 0 }
+            .map { ArenaShare(it, areaMin[it] ?: 0, areaXp[it] ?: 0) }
+            .sortedByDescending { it.minutes }
+        var best = 0
+        var bestMin = 0
+        var run = 0
+        var longest = 0
+        var active = 0
+        for (i in 0 until days) {
+            if (dayMin[i] > 0) {
+                active++
+                run++
+                if (run > longest) longest = run
+                if (dayMin[i] > bestMin) {
+                    bestMin = dayMin[i]
+                    best = i + 1
+                }
+            } else {
+                run = 0
+            }
+        }
+        val py = if (month == 0) year - 1 else year
+        val pm = if (month == 0) 11 else month - 1
+        val prev = monthDayMinutes(py, pm, ar).sum()
+        return MonthReport(
+            year, month, days, firstWd, dayMin, shares,
+            dayMin.sum(), shares.sumOf { it.xp },
+            active, best, bestMin, longest, prev
+        )
     }
 }
