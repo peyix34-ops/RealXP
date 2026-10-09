@@ -12,14 +12,13 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -55,7 +54,6 @@ import com.realxp.app.data.Xp
 import com.realxp.app.data.formatTime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.random.Random
 
 @Composable
 fun animatedProgress(target: Float, ms: Int = 1000): Float {
@@ -83,13 +81,6 @@ fun Bar(p: Float, h: Int = 6, color: Color = RX.Accent) {
     }
 }
 
-private fun depthOf(route: String): Int = when (route) {
-    "welcome" -> 0
-    "pick" -> 1
-    "home" -> 2
-    else -> 3
-}
-
 @Composable
 fun App(store: Store) {
     val ctx = LocalContext.current
@@ -113,70 +104,109 @@ fun App(store: Store) {
         ui.edit().putBoolean("dark", RX.dark).apply()
     }
 
+    val scope = rememberCoroutineScope()
+    val blackout = remember { Animatable(0f) }
+    val blocker = remember { MutableInteractionSource() }
+    val fadeThrough: (() -> Unit) -> Unit = { change ->
+        scope.launch {
+            blackout.animateTo(1f, tween(380, easing = FastOutSlowInEasing))
+            change()
+            delay(90)
+            blackout.animateTo(0f, tween(560, easing = FastOutSlowInEasing))
+        }
+    }
+
     var screen by remember { mutableStateOf(if (store.chosen().isEmpty()) "welcome" else "home") }
     var chosen by remember { mutableStateOf(store.chosen()) }
     var openArea by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableStateOf(0) }
+    var reportTarget by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var reportBack by remember { mutableStateOf("home") }
 
     val area = openArea
     val route = if (area != null) "area:$area" else screen
 
-    AnimatedContent(
-        targetState = route,
-        transitionSpec = {
-            val forward = depthOf(targetState) >= depthOf(initialState)
-            val enter = slideInHorizontally(tween(340, easing = FastOutSlowInEasing)) { w ->
-                if (forward) w / 5 else -w / 5
-            } + fadeIn(tween(340))
-            val exit = slideOutHorizontally(tween(340, easing = FastOutSlowInEasing)) { w ->
-                if (forward) -w / 5 else w / 5
-            } + fadeOut(tween(220))
-            enter togetherWith exit
-        },
-        label = "route"
-    ) { r ->
-        when {
-            r.startsWith("area:") -> {
-                BackHandler { openArea = null; tick++ }
-                AreaScreen(store, r.removePrefix("area:")) { openArea = null; tick++ }
-            }
-            r == "welcome" -> WelcomeScreen(onStart = { screen = "pick" })
-            r == "pick" -> ArenaPicker(
-                Areas.all, "Pick everything\nyou want to level up.", "CONTINUE", null
-            ) { list ->
-                store.saveChosen(list)
-                chosen = list
-                screen = "home"
-            }
-            r == "add" -> {
-                BackHandler { screen = "home" }
-                ArenaPicker(
-                    Areas.all.filter { it !in chosen },
-                    "Add more\narenas.", "ADD", { screen = "home" }
-                ) { list ->
-                    val merged = chosen + list
-                    store.saveChosen(merged)
-                    chosen = merged
-                    screen = "home"
-                    tick++
+    Box(modifier = Modifier.fillMaxSize()) {
+        AnimatedContent(
+            targetState = route,
+            transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(140)) },
+            label = "route"
+        ) { r ->
+            when {
+                r.startsWith("area:") -> {
+                    BackHandler { openArea = null; tick++ }
+                    AreaScreen(store, r.removePrefix("area:")) { openArea = null; tick++ }
                 }
+                r == "welcome" -> WelcomeScreen(onStart = { screen = "pick" })
+                r == "pick" -> ArenaPicker(
+                    Areas.all, "Pick everything\nyou want to level up.", "CONTINUE", null
+                ) { list ->
+                    fadeThrough {
+                        store.saveChosen(list)
+                        chosen = list
+                        screen = "home"
+                    }
+                }
+                r == "add" -> {
+                    BackHandler { screen = "home" }
+                    ArenaPicker(
+                        Areas.all.filter { it !in chosen },
+                        "Add more\narenas.", "ADD", { screen = "home" }
+                    ) { list ->
+                        fadeThrough {
+                            val merged = chosen + list
+                            store.saveChosen(merged)
+                            chosen = merged
+                            screen = "home"
+                            tick++
+                        }
+                    }
+                }
+                r == "profile" -> {
+                    BackHandler { screen = "home" }
+                    ProfileScreen(
+                        store,
+                        onBack = { screen = "home" },
+                        onReports = {
+                            reportTarget = null
+                            reportBack = "profile"
+                            screen = "reports"
+                        }
+                    )
+                }
+                r == "reports" -> {
+                    BackHandler { screen = reportBack; tick++ }
+                    ReportsScreen(
+                        store, reportTarget?.first, reportTarget?.second
+                    ) { screen = reportBack; tick++ }
+                }
+                else -> HomeHub(
+                    store, chosen, tick,
+                    onOpen = { openArea = it },
+                    onAdd = { screen = "add" },
+                    onRemove = { name, erase ->
+                        if (erase) store.eraseArea(name)
+                        val left = chosen - name
+                        store.saveChosen(left)
+                        chosen = left
+                        tick++
+                    },
+                    onToggleDark = toggleDark,
+                    onProfile = { screen = "profile" },
+                    onReport = { y, m ->
+                        reportTarget = Pair(y, m)
+                        reportBack = "home"
+                        screen = "reports"
+                    }
+                )
             }
-            r == "profile" -> {
-                BackHandler { screen = "home" }
-                ProfileScreen(store) { screen = "home" }
-            }
-            else -> HomeHub(
-                store, chosen, tick,
-                onOpen = { openArea = it },
-                onAdd = { screen = "add" },
-                onRemove = { name ->
-                    val left = chosen - name
-                    store.saveChosen(left)
-                    chosen = left
-                    tick++
-                },
-                onToggleDark = toggleDark,
-                onProfile = { screen = "profile" }
+        }
+        if (blackout.value > 0.001f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = blackout.value))
+                    .clickable(interactionSource = blocker, indication = null) {}
             )
         }
     }
@@ -419,7 +449,12 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
     }
 
     val request: (Int) -> Unit = { m ->
-        if (Random.nextInt(5) == 0) pendingMin = m else doLog(m)
+        if (store.honestyDue()) {
+            store.markHonesty()
+            pendingMin = m
+        } else {
+            doLog(m)
+        }
     }
 
     val pm = pendingMin
