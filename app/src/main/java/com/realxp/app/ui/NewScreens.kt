@@ -3,67 +3,75 @@ package com.realxp.app.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Bedtime
+import androidx.compose.material.icons.outlined.BusinessCenter
 import androidx.compose.material.icons.outlined.Calculate
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.DesignServices
+import androidx.compose.material.icons.outlined.DirectionsCar
+import androidx.compose.material.icons.outlined.DirectionsRun
+import androidx.compose.material.icons.outlined.Eco
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FitnessCenter
+import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Paid
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.PedalBike
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.Pool
+import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Science
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SelfImprovement
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.Spa
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.outlined.SportsEsports
+import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.realxp.app.data.Areas
 import com.realxp.app.data.Levels
 import com.realxp.app.data.Ranks
 import com.realxp.app.data.Store
-import com.realxp.app.data.formatTime
 
 val Danger = Color(0xFFFF6B6B)
 
@@ -164,17 +172,35 @@ fun RankText(
 
 fun arenaIcon(name: String): ImageVector = when (name) {
     "English" -> Icons.Outlined.Sms
-    "Fitness" -> Icons.Outlined.FitnessCenter
+    "Languages" -> Icons.Outlined.Translate
     "Reading" -> Icons.Outlined.MenuBook
     "History" -> Icons.Outlined.AccountBalance
-    "Coding" -> Icons.Outlined.Code
     "Math" -> Icons.Outlined.Calculate
-    "Writing" -> Icons.Outlined.Edit
-    "Music" -> Icons.Outlined.MusicNote
-    "Finance" -> Icons.Outlined.Paid
     "Science" -> Icons.Outlined.Science
+    "Writing" -> Icons.Outlined.Edit
+    "Coding" -> Icons.Outlined.Code
+    "AI" -> Icons.Outlined.Psychology
+    "Design" -> Icons.Outlined.DesignServices
+    "Photography" -> Icons.Outlined.PhotoCamera
     "Art" -> Icons.Outlined.Palette
+    "Music" -> Icons.Outlined.MusicNote
+    "Speaking" -> Icons.Outlined.Mic
+    "Cooking" -> Icons.Outlined.Restaurant
+    "Driving" -> Icons.Outlined.DirectionsCar
+    "Gardening" -> Icons.Outlined.Eco
+    "Fitness" -> Icons.Outlined.FitnessCenter
+    "Running" -> Icons.Outlined.DirectionsRun
+    "Swimming" -> Icons.Outlined.Pool
+    "Cycling" -> Icons.Outlined.PedalBike
+    "Yoga" -> Icons.Outlined.SelfImprovement
+    "Health" -> Icons.Outlined.Favorite
+    "Finance" -> Icons.Outlined.Paid
+    "Business" -> Icons.Outlined.BusinessCenter
+    "Investing" -> Icons.Outlined.TrendingUp
     "Meditation" -> Icons.Outlined.Spa
+    "Sleep" -> Icons.Outlined.Bedtime
+    "Travel" -> Icons.Outlined.Flight
+    "Gaming" -> Icons.Outlined.SportsEsports
     else -> Icons.Outlined.Sms
 }
 
@@ -208,7 +234,7 @@ fun LevelPill(level: Int) {
             .background(tone.copy(alpha = 0.12f), RoundedCornerShape(50))
             .padding(horizontal = 12.dp, vertical = 5.dp)
     ) {
-        Text("LV $level", color = tone, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text("${T("LV")} $level", color = tone, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -218,9 +244,20 @@ fun ArenaChoice(name: String, on: Boolean, modifier: Modifier, onClick: () -> Un
     val bg by animateColorAsState(
         if (on) RX.Accent.copy(alpha = 0.10f) else RX.Panel, tween(200), label = "cbg"
     )
+    val sc by animateFloatAsState(
+        if (on) 1.05f else 1f,
+        spring(dampingRatio = 0.5f, stiffness = 500f),
+        label = "csc"
+    )
+    val chk by animateFloatAsState(
+        if (on) 1f else 0f,
+        spring(dampingRatio = 0.45f, stiffness = 600f),
+        label = "chk"
+    )
     Box(
         modifier = modifier
             .height(88.dp)
+            .scale(sc)
             .background(bg, RoundedCornerShape(14.dp))
             .border(1.dp, border, RoundedCornerShape(14.dp))
             .clickable { onClick() },
@@ -230,7 +267,7 @@ fun ArenaChoice(name: String, on: Boolean, modifier: Modifier, onClick: () -> Un
             ArenaIcon(name, 26)
             Spacer(Modifier.height(8.dp))
             Text(
-                name,
+                A(name),
                 color = if (on) RX.Accent else RX.Text,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
@@ -239,20 +276,19 @@ fun ArenaChoice(name: String, on: Boolean, modifier: Modifier, onClick: () -> Un
                 modifier = Modifier.padding(horizontal = 6.dp)
             )
         }
-        if (on) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(6.dp)
-                    .size(16.dp)
-                    .background(RX.Accent, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Outlined.Check, contentDescription = null,
-                    tint = Color.White, modifier = Modifier.size(11.dp)
-                )
-            }
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(6.dp)
+                .size(16.dp)
+                .scale(chk)
+                .background(RX.Accent, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Outlined.Check, contentDescription = null,
+                tint = Color.White, modifier = Modifier.size(11.dp)
+            )
         }
     }
 }
@@ -266,7 +302,9 @@ fun ArenaPicker(
     onDone: (List<String>) -> Unit
 ) {
     var selected by remember { mutableStateOf(listOf<String>()) }
+    var cat by remember { mutableStateOf("All") }
     val ready = selected.isNotEmpty()
+    val shownOpts = if (cat == "All") options else options.filter { Catalog.categoryOf(it) == cat }
 
     Column(
         modifier = Modifier
@@ -283,14 +321,14 @@ fun ArenaPicker(
             Spacer(Modifier.height(16.dp))
             if (onBack != null) {
                 Text(
-                    "←  Back",
+                    T("←  Back"),
                     color = RX.Muted, fontSize = 14.sp,
                     modifier = Modifier.clickable { onBack() }.padding(vertical = 8.dp)
                 )
                 Spacer(Modifier.height(4.dp))
             }
             Text(
-                if (onBack == null) "CHOOSE YOUR AREAS" else "ADD AREAS",
+                if (onBack == null) T("CHOOSE YOUR AREAS") else T("ADD AREAS"),
                 color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.height(8.dp))
@@ -298,21 +336,37 @@ fun ArenaPicker(
                 title,
                 color = RX.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 30.sp
             )
-            Spacer(Modifier.height(20.dp))
-            if (options.isEmpty()) {
-                Text("You've added every arena.", color = RX.Muted, fontSize = 15.sp)
+            Spacer(Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                Catalog.categories.forEach { c ->
+                    MonthChip(T(c), c == cat) { cat = c }
+                    Spacer(Modifier.width(8.dp))
+                }
             }
-            options.chunked(3).forEach { row ->
-                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
-                    row.forEachIndexed { i, name ->
-                        if (i > 0) Spacer(Modifier.width(10.dp))
-                        ArenaChoice(name, name in selected, Modifier.weight(1f)) {
-                            selected = if (name in selected) selected - name else selected + name
+            Spacer(Modifier.height(18.dp))
+            if (options.isEmpty()) {
+                Text(T("You've added every arena."), color = RX.Muted, fontSize = 15.sp)
+            } else if (shownOpts.isEmpty()) {
+                Text(T("Nothing left in this category."), color = RX.Muted, fontSize = 15.sp)
+            }
+            key(cat) {
+                Column {
+                    shownOpts.chunked(3).forEachIndexed { r, row ->
+                        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+                            row.forEachIndexed { i, name ->
+                                if (i > 0) Spacer(Modifier.width(10.dp))
+                                ArenaChoice(
+                                    name, name in selected,
+                                    Modifier.weight(1f).staggerIn(minOf(r * 3 + i, 12), 35)
+                                ) {
+                                    selected = if (name in selected) selected - name else selected + name
+                                }
+                            }
+                            repeat(3 - row.size) {
+                                Spacer(Modifier.width(10.dp))
+                                Spacer(Modifier.weight(1f))
+                            }
                         }
-                    }
-                    repeat(3 - row.size) {
-                        Spacer(Modifier.width(10.dp))
-                        Spacer(Modifier.weight(1f))
                     }
                 }
             }
@@ -320,7 +374,7 @@ fun ArenaPicker(
         }
         Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
             Text(
-                if (ready) "${selected.size} selected" else "Select at least one area to continue.",
+                if (ready) TF("%d selected", selected.size) else T("Select at least one area to continue."),
                 color = RX.Muted, fontSize = 12.sp
             )
             Spacer(Modifier.height(8.dp))
@@ -375,14 +429,14 @@ fun ArenaCell(
             ArenaIcon(area, 20)
             Spacer(Modifier.width(8.dp))
             RankText(
-                area, info.level, 14.sp,
+                A(area), info.level, 14.sp,
                 Modifier.weight(1f), FontWeight.SemiBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis
             )
         }
         Spacer(Modifier.height(2.dp))
         Text(
-            Ranks.title(info.level),
+            T(Ranks.title(info.level)),
             color = if (info.level >= 10) tone else RX.Muted,
             fontSize = 11.sp
         )
@@ -392,7 +446,7 @@ fun ArenaCell(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("LV ${info.level}", color = tone, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("${T("LV")} ${info.level}", color = tone, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             if (editing && canRemove) {
                 Icon(Icons.Outlined.Close, null, tint = Danger, modifier = Modifier.size(18.dp))
             } else {
@@ -417,194 +471,6 @@ fun AddCell(modifier: Modifier, onClick: () -> Unit) {
     ) {
         Icon(Icons.Outlined.Add, null, tint = RX.Accent, modifier = Modifier.size(24.dp))
         Spacer(Modifier.height(6.dp))
-        Text("Add Arena", color = RX.Muted, fontSize = 12.sp)
-    }
-}
-
-@Composable
-fun LifeHome(
-    store: Store,
-    chosen: List<String>,
-    tick: Int,
-    onOpen: (String) -> Unit,
-    onAdd: () -> Unit,
-    onRemove: (String) -> Unit,
-    onToggleDark: () -> Unit
-) {
-    val total = remember(tick) { store.totalXp() }
-    val invested = remember(tick) { formatTime(store.allSeconds()) }
-    val info = Levels.overall(total)
-    val p = animatedProgress(info.into.toFloat() / info.need, 1400)
-    var editing by remember { mutableStateOf(false) }
-    var toRemove by remember { mutableStateOf<String?>(null) }
-    var showSettings by remember { mutableStateOf(false) }
-
-    val rm = toRemove
-    if (rm != null) {
-        AlertDialog(
-            onDismissRequest = { toRemove = null },
-            containerColor = RX.Panel,
-            title = { Text("Remove $rm?", color = RX.Text) },
-            text = { Text("Your XP is kept. You can add it back anytime.", color = RX.Muted) },
-            confirmButton = {
-                TextButton(onClick = { toRemove = null; onRemove(rm) }) {
-                    Text("Remove", color = Danger)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { toRemove = null }) {
-                    Text("Cancel", color = RX.Muted)
-                }
-            }
-        )
-    }
-
-    if (showSettings) {
-        AlertDialog(
-            onDismissRequest = { showSettings = false },
-            containerColor = RX.Panel,
-            title = { Text("Settings", color = RX.Text, fontWeight = FontWeight.Bold) },
-            text = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Dark mode", color = RX.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                        Text("Easier on the eyes at night.", color = RX.Muted, fontSize = 12.sp)
-                    }
-                    Switch(
-                        checked = RX.dark,
-                        onCheckedChange = { onToggleDark() },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = RX.Accent,
-                            uncheckedThumbColor = Color.White,
-                            uncheckedTrackColor = RX.Line,
-                            uncheckedBorderColor = RX.Line
-                        )
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showSettings = false }) {
-                    Text("Done", color = RX.Accent)
-                }
-            }
-        )
-    }
-
-    val cells = buildList<String?> {
-        addAll(chosen)
-        if (!editing && chosen.size < Areas.all.size) add(null)
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(RX.Page)
-            .systemBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(Modifier.height(14.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                buildAnnotatedString {
-                    withStyle(SpanStyle(color = RX.Text)) { append("REAL ") }
-                    withStyle(SpanStyle(color = RX.Accent)) { append("XP") }
-                },
-                fontSize = 18.sp, fontWeight = FontWeight.ExtraBold
-            )
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .background(RX.Panel, CircleShape)
-                    .border(1.dp, RX.Line, CircleShape)
-                    .clickable { showSettings = true },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Outlined.Settings, null, tint = RX.Muted, modifier = Modifier.size(20.dp))
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-        Box(contentAlignment = Alignment.Center) {
-            Canvas(modifier = Modifier.size(160.dp)) {
-                val stroke = 9.dp.toPx()
-                val topLeft = Offset(stroke / 2, stroke / 2)
-                val arcSize = Size(size.width - stroke, size.height - stroke)
-                drawArc(
-                    color = RX.Line, startAngle = -90f, sweepAngle = 360f, useCenter = false,
-                    topLeft = topLeft, size = arcSize,
-                    style = Stroke(stroke, cap = StrokeCap.Round)
-                )
-                if (p > 0.002f) {
-                    drawArc(
-                        brush = Brush.linearGradient(listOf(RX.Blue, RX.Accent)),
-                        startAngle = -90f, sweepAngle = 360f * p, useCenter = false,
-                        topLeft = topLeft, size = arcSize,
-                        style = Stroke(stroke, cap = StrokeCap.Round)
-                    )
-                }
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("LEVEL", color = RX.Muted, fontSize = 10.sp, letterSpacing = 3.sp)
-                Text("${info.level}", color = RX.Text, fontSize = 48.sp, fontWeight = FontWeight.Bold)
-                RankText(
-                    Ranks.title(info.level).uppercase(), info.level, 10.sp,
-                    fontWeight = FontWeight.Bold, letterSpacing = 2.sp
-                )
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(
-            "${info.into} / ${info.need} XP   ·   $invested invested",
-            color = RX.Muted, fontSize = 12.sp
-        )
-        Spacer(Modifier.height(24.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("YOUR ARENAS", color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
-            if (chosen.size > 1) {
-                Text(
-                    if (editing) "DONE" else "EDIT",
-                    color = RX.Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp,
-                    modifier = Modifier.clickable { editing = !editing }.padding(vertical = 6.dp)
-                )
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        cells.chunked(2).forEach { row ->
-            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
-                row.forEachIndexed { i, name ->
-                    if (i > 0) Spacer(Modifier.width(10.dp))
-                    if (name == null) {
-                        AddCell(Modifier.weight(1f)) { onAdd() }
-                    } else {
-                        ArenaCell(name, store, tick, editing, chosen.size > 1, Modifier.weight(1f)) {
-                            if (editing) {
-                                if (chosen.size > 1) toRemove = name
-                            } else {
-                                onOpen(name)
-                            }
-                        }
-                    }
-                }
-                repeat(2 - row.size) {
-                    Spacer(Modifier.width(10.dp))
-                    Spacer(Modifier.weight(1f))
-                }
-            }
-        }
-        Spacer(Modifier.height(24.dp))
+        Text(T("Add Arena"), color = RX.Muted, fontSize = 12.sp)
     }
 }
