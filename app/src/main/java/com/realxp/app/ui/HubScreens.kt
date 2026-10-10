@@ -47,12 +47,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.realxp.app.data.Areas
 import com.realxp.app.data.Levels
 import com.realxp.app.data.LogEntry
 import com.realxp.app.data.Ranks
 import com.realxp.app.data.Store
-import com.realxp.app.data.formatTime
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -113,7 +111,7 @@ fun HeatLegend() {
         horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("Less", color = RX.Muted, fontSize = 10.sp)
+        Text(T("Less"), color = RX.Muted, fontSize = 10.sp)
         Spacer(Modifier.width(6.dp))
         listOf(0.7f to 0, 0.28f to 1, 0.5f to 2, 0.75f to 3, 1f to 4).forEach { (a, lvl) ->
             Box(
@@ -127,13 +125,18 @@ fun HeatLegend() {
             )
         }
         Spacer(Modifier.width(6.dp))
-        Text("More", color = RX.Muted, fontSize = 10.sp)
+        Text(T("More"), color = RX.Muted, fontSize = 10.sp)
     }
 }
 
 @Composable
 fun HistoryRow(e: LogEntry) {
-    val fmt = remember { SimpleDateFormat("MMM d  ·  HH:mm", Locale.US) }
+    val fmt = remember(Lang.tr) {
+        SimpleDateFormat(
+            "MMM d  ·  HH:mm",
+            if (Lang.tr) Locale("tr", "TR") else Locale.US
+        )
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -145,7 +148,7 @@ fun HistoryRow(e: LogEntry) {
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                formatTime(e.minutes * 60),
+                ftime(e.minutes * 60),
                 color = RX.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold
             )
             Text(fmt.format(Date(e.ts)), color = RX.Muted, fontSize = 12.sp)
@@ -174,7 +177,7 @@ fun StreakPill(days: Int) {
         )
         Spacer(Modifier.width(6.dp))
         Text(
-            if (days == 1) "1 day streak" else "$days day streak",
+            if (days == 1) T("1 day streak") else TF("%d day streak", days),
             color = Flame, fontSize = 12.sp, fontWeight = FontWeight.Bold
         )
     }
@@ -218,11 +221,12 @@ fun HomeHub(
     onAdd: () -> Unit,
     onRemove: (String, Boolean) -> Unit,
     onToggleDark: () -> Unit,
+    onSetLang: (Boolean) -> Unit,
     onProfile: () -> Unit,
     onReport: (Int, Int) -> Unit
 ) {
     val total = remember(tick) { store.totalXp() }
-    val invested = remember(tick) { formatTime(store.allSeconds()) }
+    val investedSec = remember(tick) { store.allSeconds() }
     val streak = remember(tick) { store.streak() }
     val pending = remember(tick) { store.pendingReport() }
     val info = Levels.overall(total)
@@ -237,23 +241,23 @@ fun HomeHub(
         AlertDialog(
             onDismissRequest = { toRemove = null },
             containerColor = RX.Panel,
-            title = { Text("Remove $rm?", color = RX.Text) },
+            title = { Text(TF("Remove %s?", A(rm)), color = RX.Text) },
             text = {
                 Column {
                     Text(
-                        "Keep your progress hidden, or erase it for good?",
+                        T("Keep your progress hidden, or erase it for good?"),
                         color = RX.Muted, fontSize = 14.sp
                     )
                     Spacer(Modifier.height(16.dp))
-                    DialogButton("Remove, keep progress", RX.Accent) {
+                    DialogButton(T("Remove, keep progress"), RX.Accent) {
                         toRemove = null
                         onRemove(rm, false)
                     }
-                    DialogButton("Remove and erase progress", Danger) {
+                    DialogButton(T("Remove and erase progress"), Danger) {
                         toRemove = null
                         onRemove(rm, true)
                     }
-                    DialogButton("Cancel", RX.Muted) { toRemove = null }
+                    DialogButton(T("Cancel"), RX.Muted) { toRemove = null }
                 }
             },
             confirmButton = {}
@@ -264,33 +268,43 @@ fun HomeHub(
         AlertDialog(
             onDismissRequest = { showSettings = false },
             containerColor = RX.Panel,
-            title = { Text("Settings", color = RX.Text, fontWeight = FontWeight.Bold) },
+            title = { Text(T("Settings"), color = RX.Text, fontWeight = FontWeight.Bold) },
             text = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Dark mode", color = RX.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                        Text("Easier on the eyes at night.", color = RX.Muted, fontSize = 12.sp)
-                    }
-                    Switch(
-                        checked = RX.dark,
-                        onCheckedChange = { onToggleDark() },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = RX.Accent,
-                            uncheckedThumbColor = Color.White,
-                            uncheckedTrackColor = RX.Line,
-                            uncheckedBorderColor = RX.Line
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(T("Dark mode"), color = RX.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text(T("Easier on the eyes at night."), color = RX.Muted, fontSize = 12.sp)
+                        }
+                        Switch(
+                            checked = RX.dark,
+                            onCheckedChange = { onToggleDark() },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = RX.Accent,
+                                uncheckedThumbColor = Color.White,
+                                uncheckedTrackColor = RX.Line,
+                                uncheckedBorderColor = RX.Line
+                            )
                         )
-                    )
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    Text(T("Language"), color = RX.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(10.dp))
+                    Row {
+                        MonthChip("English", !Lang.tr) { onSetLang(false) }
+                        Spacer(Modifier.width(8.dp))
+                        MonthChip("Türkçe", Lang.tr) { onSetLang(true) }
+                    }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showSettings = false }) {
-                    Text("Done", color = RX.Accent)
+                    Text(T("Done"), color = RX.Accent)
                 }
             }
         )
@@ -298,7 +312,7 @@ fun HomeHub(
 
     val cells = buildList<String?> {
         addAll(chosen)
-        if (!editing && chosen.size < Areas.all.size) add(null)
+        if (!editing && chosen.size < Catalog.all.size) add(null)
     }
 
     Column(
@@ -350,17 +364,17 @@ fun HomeHub(
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("LEVEL", color = RX.Muted, fontSize = 10.sp, letterSpacing = 3.sp)
+                Text(T("LEVEL"), color = RX.Muted, fontSize = 10.sp, letterSpacing = 3.sp)
                 Text("${info.level}", color = RX.Text, fontSize = 48.sp, fontWeight = FontWeight.Bold)
                 RankText(
-                    Ranks.title(info.level).uppercase(), info.level, 10.sp,
+                    up(T(Ranks.title(info.level))), info.level, 10.sp,
                     fontWeight = FontWeight.Bold, letterSpacing = 2.sp
                 )
             }
         }
         Spacer(Modifier.height(10.dp))
         Text(
-            "$intoShown / ${info.need} XP   ·   $invested invested",
+            "$intoShown / ${info.need} XP   ·   ${ftime(investedSec)} ${T("invested")}",
             color = RX.Muted, fontSize = 12.sp
         )
         if (streak > 0) {
@@ -370,8 +384,8 @@ fun HomeHub(
         if (pending != null) {
             Spacer(Modifier.height(16.dp))
             ReportCard(
-                "${MONTHS[pending.second]} report is ready",
-                "See how your month went", true
+                TF("%s report is ready", monthName(pending.second)),
+                T("See how your month went"), true
             ) { onReport(pending.first, pending.second) }
         }
         Spacer(Modifier.height(22.dp))
@@ -380,10 +394,10 @@ fun HomeHub(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("YOUR ARENAS", color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
+            Text(T("YOUR ARENAS"), color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
             if (chosen.size > 1) {
                 Text(
-                    if (editing) "DONE" else "EDIT",
+                    if (editing) T("DONE") else T("EDIT"),
                     color = RX.Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp,
                     modifier = Modifier.clickable { editing = !editing }.padding(vertical = 6.dp)
                 )
@@ -396,11 +410,11 @@ fun HomeHub(
                     if (c > 0) Spacer(Modifier.width(10.dp))
                     val idx = r * 2 + c
                     if (name == null) {
-                        AddCell(Modifier.weight(1f).staggerIn(idx)) { onAdd() }
+                        AddCell(Modifier.weight(1f).staggerIn(minOf(idx, 12))) { onAdd() }
                     } else {
                         ArenaCell(
                             name, store, tick, editing, chosen.size > 1,
-                            Modifier.weight(1f).staggerIn(idx)
+                            Modifier.weight(1f).staggerIn(minOf(idx, 12))
                         ) {
                             if (editing) {
                                 if (chosen.size > 1) toRemove = name
@@ -454,7 +468,7 @@ fun ProfileScreen(store: Store, onBack: () -> Unit, onReports: () -> Unit) {
     val p = animatedProgress(info.into.toFloat() / info.need, 1000)
     val streak = remember { store.streak() }
     val best = remember { store.bestStreak() }
-    val time = remember { formatTime(store.allSeconds()) }
+    val timeSec = remember { store.allSeconds() }
     val logs = remember { store.totalLogs() }
     val heat = remember { store.heat(16, null) }
     val totalShown = countUp(total, 1100)
@@ -470,7 +484,7 @@ fun ProfileScreen(store: Store, onBack: () -> Unit, onReports: () -> Unit) {
     ) {
         Spacer(Modifier.height(10.dp))
         Text(
-            "←  Back",
+            T("←  Back"),
             color = RX.Muted, fontSize = 14.sp,
             modifier = Modifier.clickable { onBack() }.padding(vertical = 8.dp)
         )
@@ -487,10 +501,10 @@ fun ProfileScreen(store: Store, onBack: () -> Unit, onReports: () -> Unit) {
             Spacer(Modifier.width(14.dp))
             Column {
                 RankText(
-                    Ranks.title(info.level), info.level, 22.sp,
+                    T(Ranks.title(info.level)), info.level, 22.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Text("Level ${info.level}", color = RX.Muted, fontSize = 13.sp)
+                Text(TF("Level %d", info.level), color = RX.Muted, fontSize = 13.sp)
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -499,38 +513,38 @@ fun ProfileScreen(store: Store, onBack: () -> Unit, onReports: () -> Unit) {
         Text("${info.into} / ${info.need} XP", color = RX.Muted, fontSize = 12.sp)
 
         Spacer(Modifier.height(24.dp))
-        Text("MY STATS", color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
+        Text(T("MY STATS"), color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             StatCard(
-                Icons.Outlined.LocalFireDepartment, "Current Streak",
-                if (streak == 1) "1 day" else "$streak days",
-                "Best: $best", Flame, Modifier.weight(1f).staggerIn(0)
+                Icons.Outlined.LocalFireDepartment, T("Current Streak"),
+                daysText(streak),
+                TF("Best: %d", best), Flame, Modifier.weight(1f).staggerIn(0)
             )
             Spacer(Modifier.width(10.dp))
             StatCard(
-                Icons.Outlined.EmojiEvents, "Total XP", "$totalShown",
+                Icons.Outlined.EmojiEvents, T("Total XP"), "$totalShown",
                 null, RankColors.gold, Modifier.weight(1f).staggerIn(1)
             )
         }
         Spacer(Modifier.height(10.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             StatCard(
-                Icons.Outlined.Schedule, "Time Invested", time,
+                Icons.Outlined.Schedule, T("Time Invested"), ftime(timeSec),
                 null, RX.Accent, Modifier.weight(1f).staggerIn(2)
             )
             Spacer(Modifier.width(10.dp))
             StatCard(
-                Icons.Outlined.BarChart, "Total Logs", "$logsShown",
+                Icons.Outlined.BarChart, T("Total Logs"), "$logsShown",
                 null, RX.Accent, Modifier.weight(1f).staggerIn(3)
             )
         }
 
         Spacer(Modifier.height(16.dp))
-        ReportCard("Monthly Reports", "See every month at a glance", false) { onReports() }
+        ReportCard(T("Monthly Reports"), T("See every month at a glance"), false) { onReports() }
 
         Spacer(Modifier.height(24.dp))
-        Text("ACTIVITY  ·  LAST 16 WEEKS", color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
+        Text(T("ACTIVITY  ·  LAST 16 WEEKS"), color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
         Heatmap(heat)
         Spacer(Modifier.height(8.dp))
