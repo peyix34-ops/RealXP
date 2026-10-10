@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
+import kotlinx.coroutines.launch
 
 fun Modifier.bounceClick(onClick: () -> Unit): Modifier = composed {
     val src = remember { MutableInteractionSource() }
@@ -129,7 +130,8 @@ fun FloatingGain(text: String, id: Int, modifier: Modifier = Modifier) {
         if (id > 0) {
             prog.snapTo(0f)
             pop.snapTo(0f)
-            launch2(prog, pop)
+            launch { pop.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = 500f)) }
+            prog.animateTo(1f, tween(1200, easing = FastOutSlowInEasing))
         }
     }
     val p = prog.value
@@ -147,13 +149,6 @@ fun FloatingGain(text: String, id: Int, modifier: Modifier = Modifier) {
     }
 }
 
-private suspend fun launch2(prog: Animatable<Float, *>, pop: Animatable<Float, *>) {
-    kotlinx.coroutines.coroutineScope {
-        launch { pop.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = 500f)) }
-        launch { prog.animateTo(1f, tween(1200, easing = FastOutSlowInEasing)) }
-    }
-}
-
 @Composable
 fun BurstParticles(progress: Float, tone: Color, modifier: Modifier = Modifier) {
     val parts = remember {
@@ -168,12 +163,15 @@ fun BurstParticles(progress: Float, tone: Color, modifier: Modifier = Modifier) 
         val cy = size.height / 2
         val t = FastOutSlowInEasing.transform(progress.coerceIn(0f, 1f))
         val alpha = (1f - progress).coerceIn(0f, 1f)
-        parts.forEachIndexed { i, (a, sp, r) ->
-            val d = maxR * sp * t
+        parts.forEachIndexed { i, part ->
+            val ang = part.first
+            val reach = part.second
+            val rad = part.third
+            val d = maxR * reach * t
             drawCircle(
                 color = (if (i % 3 == 0) Color.White else tone).copy(alpha = alpha),
-                radius = r.dp.toPx() * (1f - 0.5f * progress),
-                center = Offset(cx + cos(a) * d, cy + sin(a) * d)
+                radius = rad.dp.toPx() * (1f - 0.5f * progress),
+                center = Offset(cx + cos(ang) * d, cy + sin(ang) * d)
             )
         }
     }
