@@ -29,14 +29,8 @@ import com.realxp.app.data.ArenaShare
 import com.realxp.app.data.DayStat
 import com.realxp.app.data.MonthReport
 import com.realxp.app.data.Store
-import com.realxp.app.data.formatTime
 import com.realxp.app.data.monthKey
 import java.util.Calendar
-
-val MONTHS = listOf(
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-)
 
 @Composable
 fun ReportCard(title: String, subtitle: String, highlight: Boolean, onClick: () -> Unit) {
@@ -99,9 +93,9 @@ fun MonthCalendar(rep: MonthReport) {
     val rows = (cells + 6) / 7
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth()) {
-            listOf("M", "T", "W", "T", "F", "S", "S").forEach { d ->
+            for (i in 0 until 7) {
                 Text(
-                    d,
+                    dayLetter(i),
                     color = RX.Muted, fontSize = 11.sp, textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f)
                 )
@@ -165,14 +159,14 @@ fun ArenaShareRow(s: ArenaShare, total: Int) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(s.area, color = RX.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Text(formatTime(s.minutes * 60), color = RX.Muted, fontSize = 13.sp)
+                Text(A(s.area), color = RX.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(ftime(s.minutes * 60), color = RX.Muted, fontSize = 13.sp)
             }
             Spacer(Modifier.height(6.dp))
             Bar(p, 5)
             Spacer(Modifier.height(4.dp))
             Text(
-                "${(frac * 100).toInt()}%  ·  +${s.xp} XP",
+                "${pctText((frac * 100).toInt())}  ·  +${s.xp} XP",
                 color = RX.Muted, fontSize = 11.sp
             )
         }
@@ -197,20 +191,19 @@ fun InsightRow(label: String, value: String) {
 
 @Composable
 fun ReportBody(rep: MonthReport) {
-    val prevMonth = if (rep.month == 0) 11 else rep.month - 1
     val avg = if (rep.activeDays > 0) rep.totalMinutes / rep.activeDays else 0
     val pct = if (rep.days > 0) rep.activeDays * 100 / rep.days else 0
     val compare = when {
-        rep.prevMinutes <= 0 -> "First tracked month"
+        rep.prevMinutes <= 0 -> T("First tracked month")
         rep.totalMinutes >= rep.prevMinutes ->
-            "▲ ${(rep.totalMinutes - rep.prevMinutes) * 100 / rep.prevMinutes}% vs ${MONTHS[prevMonth]}"
+            "▲ ${pctText((rep.totalMinutes - rep.prevMinutes) * 100 / rep.prevMinutes)} ${T("vs last month")}"
         else ->
-            "▼ ${(rep.prevMinutes - rep.totalMinutes) * 100 / rep.prevMinutes}% vs ${MONTHS[prevMonth]}"
+            "▼ ${pctText((rep.prevMinutes - rep.totalMinutes) * 100 / rep.prevMinutes)} ${T("vs last month")}"
     }
 
     if (rep.totalMinutes == 0) {
         Text(
-            "No activity in ${MONTHS[rep.month]}.",
+            TF("No activity in %s.", monthName(rep.month)),
             color = RX.Muted, fontSize = 15.sp
         )
         return
@@ -218,56 +211,56 @@ fun ReportBody(rep: MonthReport) {
 
     Row(modifier = Modifier.fillMaxWidth()) {
         StatCard(
-            Icons.Outlined.Schedule, "Total Time",
-            formatTime(rep.totalMinutes * 60), compare, RX.Accent,
+            Icons.Outlined.Schedule, T("Total Time"),
+            ftime(rep.totalMinutes * 60), compare, RX.Accent,
             Modifier.weight(1f).staggerIn(0)
         )
         Spacer(Modifier.width(10.dp))
         StatCard(
-            Icons.Outlined.EmojiEvents, "XP Earned", "${rep.totalXp}",
+            Icons.Outlined.EmojiEvents, T("XP Earned"), "${rep.totalXp}",
             null, RankColors.gold, Modifier.weight(1f).staggerIn(1)
         )
     }
     Spacer(Modifier.height(10.dp))
     Row(modifier = Modifier.fillMaxWidth()) {
         StatCard(
-            Icons.Outlined.CalendarMonth, "Active Days",
-            "${rep.activeDays} / ${rep.days}", "$pct% consistency", RX.Accent,
+            Icons.Outlined.CalendarMonth, T("Active Days"),
+            "${rep.activeDays} / ${rep.days}", "${pctText(pct)} ${T("consistency")}", RX.Accent,
             Modifier.weight(1f).staggerIn(2)
         )
         Spacer(Modifier.width(10.dp))
         StatCard(
-            Icons.Outlined.Star, "Best Day",
-            formatTime(rep.bestMinutes * 60),
-            "${MONTHS[rep.month].take(3)} ${rep.bestDay}", Flame,
+            Icons.Outlined.Star, T("Best Day"),
+            ftime(rep.bestMinutes * 60),
+            "${monthName(rep.month).take(3)} ${rep.bestDay}", Flame,
             Modifier.weight(1f).staggerIn(3)
         )
     }
 
     Spacer(Modifier.height(24.dp))
-    Text("INSIGHTS", color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
+    Text(T("INSIGHTS"), color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(10.dp))
-    InsightRow("Longest streak", if (rep.longestStreak == 1) "1 day" else "${rep.longestStreak} days")
-    InsightRow("Average on active days", formatTime(avg * 60))
+    InsightRow(T("Longest streak"), daysText(rep.longestStreak))
+    InsightRow(T("Average on active days"), ftime(avg * 60))
     if (rep.arenas.isNotEmpty()) {
         val top = rep.arenas.first()
         val share = if (rep.totalMinutes > 0) top.minutes * 100 / rep.totalMinutes else 0
-        InsightRow("Most invested", "${top.area}  ·  $share%")
+        InsightRow(T("Most invested"), "${A(top.area)}  ·  ${pctText(share)}")
     }
 
     Spacer(Modifier.height(20.dp))
-    Text("CALENDAR", color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
+    Text(T("CALENDAR"), color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(10.dp))
     MonthCalendar(rep)
 
     Spacer(Modifier.height(24.dp))
-    Text("WEEK BY WEEK", color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
+    Text(T("WEEK BY WEEK"), color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(10.dp))
     val weeks = rep.dayMinutes.chunked(7).mapIndexed { i, l -> DayStat("W${i + 1}", l.sum(), false) }
     WeekChart(weeks, RX.Accent)
 
     Spacer(Modifier.height(24.dp))
-    Text("ARENAS", color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
+    Text(T("ARENAS"), color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(12.dp))
     rep.arenas.forEach { ArenaShareRow(it, rep.totalMinutes) }
 }
@@ -309,17 +302,17 @@ fun ReportsScreen(store: Store, startYear: Int?, startMonth: Int?, onBack: () ->
     ) {
         Spacer(Modifier.height(10.dp))
         Text(
-            "←  Back",
+            T("←  Back"),
             color = RX.Muted, fontSize = 14.sp,
             modifier = Modifier.clickable { onBack() }.padding(vertical = 8.dp)
         )
         Spacer(Modifier.height(8.dp))
-        Text("MONTHLY REPORT", color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
+        Text(up(T("Monthly report")), color = RX.Accent, fontSize = 11.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
             months.forEach { ym ->
                 MonthChip(
-                    "${MONTHS[ym.second].take(3)} ${ym.first}",
+                    "${monthName(ym.second).take(3)} ${ym.first}",
                     ym == sel
                 ) { sel = ym }
                 Spacer(Modifier.width(8.dp))
@@ -327,11 +320,11 @@ fun ReportsScreen(store: Store, startYear: Int?, startMonth: Int?, onBack: () ->
         }
         Spacer(Modifier.height(20.dp))
         Text(
-            "${MONTHS[sel.second]} ${sel.first}",
+            "${monthName(sel.second)} ${sel.first}",
             color = RX.Text, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold
         )
         Text(
-            if (isCurrent) "In progress" else "Complete",
+            if (isCurrent) T("In progress") else T("Complete"),
             color = RX.Muted, fontSize = 13.sp
         )
         Spacer(Modifier.height(18.dp))
