@@ -31,7 +31,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -39,6 +38,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -54,6 +54,8 @@ import com.realxp.app.data.Store
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.cos
+import kotlin.math.sin
 
 val Flame = Color(0xFFFF7A1A)
 
@@ -159,26 +161,21 @@ fun HistoryRow(e: LogEntry) {
 
 @Composable
 fun StreakPill(days: Int) {
-    val pulse by rememberInfiniteTransition(label = "flame").animateFloat(
-        initialValue = 1f,
-        targetValue = 1.18f,
-        animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "flameValue"
-    )
     Row(
         modifier = Modifier
-            .background(Flame.copy(alpha = 0.12f), RoundedCornerShape(50))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .background(
+                Brush.horizontalGradient(listOf(Color(0x33FF8A1A), Color(0x22FF3D2E))),
+                RoundedCornerShape(50)
+            )
+            .border(1.dp, Color(0x55FF8A1A), RoundedCornerShape(50))
+            .padding(horizontal = 14.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            Icons.Outlined.LocalFireDepartment, null, tint = Flame,
-            modifier = Modifier.size(16.dp).scale(pulse)
-        )
-        Spacer(Modifier.width(6.dp))
+        FlameIcon(24.dp)
+        Spacer(Modifier.width(8.dp))
         Text(
             if (days == 1) T("1 day streak") else TF("%d day streak", days),
-            color = Flame, fontSize = 12.sp, fontWeight = FontWeight.Bold
+            color = Flame, fontSize = 13.sp, fontWeight = FontWeight.Bold
         )
     }
 }
@@ -209,6 +206,60 @@ fun DialogButton(label: String, color: Color, onClick: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Text(label, color = color, fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+fun HeroRing(p: Float, level: Int) {
+    val breathe by rememberInfiniteTransition(label = "hero").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2400, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "heroT"
+    )
+    Box(contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.size(176.dp)) {
+            val stroke = 12.dp.toPx()
+            val tl = Offset(stroke / 2, stroke / 2)
+            val sz = Size(size.width - stroke, size.height - stroke)
+            if (p > 0.01f) {
+                drawArc(
+                    color = RX.Accent.copy(alpha = 0.10f + 0.07f * breathe),
+                    startAngle = -90f, sweepAngle = 360f * p, useCenter = false,
+                    topLeft = tl, size = sz,
+                    style = Stroke(stroke * 1.9f, cap = StrokeCap.Round)
+                )
+            }
+            drawArc(
+                color = RX.Line,
+                startAngle = -90f, sweepAngle = 360f, useCenter = false,
+                topLeft = tl, size = sz, style = Stroke(stroke)
+            )
+            if (p > 0.01f) {
+                rotate(-90f) {
+                    drawArc(
+                        brush = Brush.sweepGradient(listOf(RX.Blue, RX.Accent)),
+                        startAngle = 0f, sweepAngle = 360f * p, useCenter = false,
+                        topLeft = tl, size = sz,
+                        style = Stroke(stroke, cap = StrokeCap.Round)
+                    )
+                }
+                val r = (size.width - stroke) / 2f
+                val ang = Math.toRadians((-90f + 360f * p).toDouble())
+                val ex = size.width / 2f + r * cos(ang).toFloat()
+                val ey = size.height / 2f + r * sin(ang).toFloat()
+                drawCircle(RX.Accent.copy(alpha = 0.35f), radius = stroke * 0.7f, center = Offset(ex, ey))
+                drawCircle(Color.White, radius = stroke * 0.3f, center = Offset(ex, ey))
+            }
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(T("LEVEL"), color = RX.Muted, fontSize = 10.sp, letterSpacing = 3.sp)
+            Text("$level", color = RX.Text, fontSize = 52.sp, fontWeight = FontWeight.Bold)
+            RankText(
+                up(T(Ranks.title(level))), level, 10.sp,
+                fontWeight = FontWeight.Bold, letterSpacing = 2.sp
+            )
+        }
     }
 }
 
@@ -344,41 +395,14 @@ fun HomeHub(
             }
         }
         Spacer(Modifier.height(16.dp))
-        Box(contentAlignment = Alignment.Center) {
-            Canvas(modifier = Modifier.size(160.dp)) {
-                val stroke = 9.dp.toPx()
-                val topLeft = Offset(stroke / 2, stroke / 2)
-                val arcSize = Size(size.width - stroke, size.height - stroke)
-                drawArc(
-                    color = RX.Line, startAngle = -90f, sweepAngle = 360f, useCenter = false,
-                    topLeft = topLeft, size = arcSize,
-                    style = Stroke(stroke, cap = StrokeCap.Round)
-                )
-                if (p > 0.002f) {
-                    drawArc(
-                        brush = Brush.linearGradient(listOf(RX.Blue, RX.Accent)),
-                        startAngle = -90f, sweepAngle = 360f * p, useCenter = false,
-                        topLeft = topLeft, size = arcSize,
-                        style = Stroke(stroke, cap = StrokeCap.Round)
-                    )
-                }
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(T("LEVEL"), color = RX.Muted, fontSize = 10.sp, letterSpacing = 3.sp)
-                Text("${info.level}", color = RX.Text, fontSize = 48.sp, fontWeight = FontWeight.Bold)
-                RankText(
-                    up(T(Ranks.title(info.level))), info.level, 10.sp,
-                    fontWeight = FontWeight.Bold, letterSpacing = 2.sp
-                )
-            }
-        }
-        Spacer(Modifier.height(10.dp))
+        HeroRing(p, info.level)
+        Spacer(Modifier.height(12.dp))
         Text(
             "$intoShown / ${info.need} XP   ·   ${ftime(investedSec)} ${T("invested")}",
             color = RX.Muted, fontSize = 12.sp
         )
         if (streak > 0) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             StreakPill(streak)
         }
         if (pending != null) {
@@ -388,7 +412,7 @@ fun HomeHub(
                 T("See how your month went"), true
             ) { onReport(pending.first, pending.second) }
         }
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(24.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -412,7 +436,7 @@ fun HomeHub(
                     if (name == null) {
                         AddCell(Modifier.weight(1f).staggerIn(minOf(idx, 12))) { onAdd() }
                     } else {
-                        ArenaCell(
+                        ArenaCard2(
                             name, store, tick, editing, chosen.size > 1,
                             Modifier.weight(1f).staggerIn(minOf(idx, 12))
                         ) {
@@ -441,7 +465,8 @@ fun StatCard(
     value: String,
     sub: String?,
     tint: Color,
-    modifier: Modifier
+    modifier: Modifier,
+    flame: Boolean = false
 ) {
     Column(
         modifier = modifier
@@ -449,7 +474,11 @@ fun StatCard(
             .border(1.dp, RX.Line, RoundedCornerShape(16.dp))
             .padding(14.dp)
     ) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(22.dp))
+        if (flame) {
+            FlameIcon(26.dp)
+        } else {
+            Icon(icon, null, tint = tint, modifier = Modifier.size(22.dp))
+        }
         Spacer(Modifier.height(10.dp))
         Text(label, color = RX.Muted, fontSize = 11.sp)
         Spacer(Modifier.height(2.dp))
@@ -519,7 +548,8 @@ fun ProfileScreen(store: Store, onBack: () -> Unit, onReports: () -> Unit) {
             StatCard(
                 Icons.Outlined.LocalFireDepartment, T("Current Streak"),
                 daysText(streak),
-                TF("Best: %d", best), Flame, Modifier.weight(1f).staggerIn(0)
+                TF("Best: %d", best), Flame, Modifier.weight(1f).staggerIn(0),
+                flame = true
             )
             Spacer(Modifier.width(10.dp))
             StatCard(
