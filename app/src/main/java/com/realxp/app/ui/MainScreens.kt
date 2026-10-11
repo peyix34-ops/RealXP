@@ -33,6 +33,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.realxp.app.data.DayStat
+import com.realxp.app.data.LevelInfo
 import com.realxp.app.data.Levels
 import com.realxp.app.data.Ranks
 import com.realxp.app.data.Store
@@ -223,31 +225,47 @@ fun App(store: Store) {
 }
 
 @Composable
-fun QuickLog(minutes: Int, gainText: String, modifier: Modifier, onClick: () -> Unit) {
+fun QuickLog(
+    minutes: Int,
+    label: String,
+    enabled: Boolean,
+    accent: Color,
+    modifier: Modifier,
+    onClick: () -> Unit
+) {
     Column(
         modifier = modifier
-            .bounceClick { onClick() }
-            .background(RX.Panel, RoundedCornerShape(12.dp))
-            .border(1.dp, RX.Line, RoundedCornerShape(12.dp))
-            .padding(vertical = 12.dp),
+            .alpha(if (enabled) 1f else 0.5f)
+            .then(if (enabled) Modifier.bounceClick { onClick() } else Modifier)
+            .background(
+                Brush.verticalGradient(listOf(accent.copy(alpha = 0.12f), RX.Panel)),
+                RoundedCornerShape(16.dp)
+            )
+            .border(
+                1.dp,
+                accent.copy(alpha = if (enabled) 0.32f else 0.12f),
+                RoundedCornerShape(16.dp)
+            )
+            .padding(top = 12.dp, bottom = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("$minutes${T("m")}", color = RX.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-        Spacer(Modifier.height(2.dp))
-        Text(gainText, color = RX.Accent, fontSize = 11.sp, maxLines = 1)
+        Text("$minutes${T("m")}", color = RX.Text, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Spacer(Modifier.height(6.dp))
+        Box(
+            modifier = Modifier
+                .background(accent.copy(alpha = 0.16f), RoundedCornerShape(50))
+                .padding(horizontal = 8.dp, vertical = 3.dp)
+        ) {
+            Text(label, color = accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        }
     }
 }
 
 @Composable
-fun StatBox(label: String, value: String, modifier: Modifier) {
-    Column(
-        modifier = modifier
-            .background(RX.Panel, RoundedCornerShape(12.dp))
-            .border(1.dp, RX.Line, RoundedCornerShape(12.dp))
-            .padding(10.dp)
-    ) {
+fun MiniStat(label: String, value: String, modifier: Modifier) {
+    Column(modifier = modifier) {
         Text(label, color = RX.Muted, fontSize = 10.sp, letterSpacing = 1.5.sp)
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(3.dp))
         Text(value, color = RX.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
@@ -266,7 +284,11 @@ fun WeekChart(days: List<DayStat>, tone: Color, labels: List<String>? = null) {
             val frac = animatedProgress(d.minutes.toFloat() / maxM, 800)
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    if (d.minutes > 0) "${d.minutes}" else "",
+                    when {
+                        d.minutes <= 0 -> ""
+                        d.minutes >= 60 -> "${d.minutes / 60}${T("h")}"
+                        else -> "${d.minutes}"
+                    },
                     color = RX.Muted, fontSize = 9.sp,
                     modifier = Modifier.height(12.dp)
                 )
@@ -280,7 +302,7 @@ fun WeekChart(days: List<DayStat>, tone: Color, labels: List<String>? = null) {
                                 d.isToday -> tone
                                 else -> tone.copy(alpha = 0.5f)
                             },
-                            RoundedCornerShape(6.dp)
+                            RoundedCornerShape(7.dp)
                         )
                 )
                 Spacer(Modifier.height(5.dp))
@@ -392,6 +414,49 @@ fun LevelUpOverlay(area: String, level: Int, gained: Int, onDismiss: () -> Unit)
 }
 
 @Composable
+fun AreaHero(area: String, info: LevelInfo, p: Float, popId: Int) {
+    val accent = arenaAccent(area)
+    val shape = RoundedCornerShape(24.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(accent.copy(alpha = 0.18f), RX.Panel)))
+            .border(1.dp, accent.copy(alpha = 0.30f), shape)
+    ) {
+        ArenaDecor(area, Modifier.matchParentSize())
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ProgressIcon(area, p, 68)
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    RankText(A(area), info.level, 24.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(2.dp))
+                    RankText(
+                        up(T(Ranks.title(info.level))), info.level, 11.sp,
+                        letterSpacing = 2.sp, fontWeight = FontWeight.Medium
+                    )
+                }
+                LevelPill(info.level)
+            }
+            Spacer(Modifier.height(16.dp))
+            XpBar(p, 6, accent, popId)
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("${info.into} / ${info.need} XP", color = RX.Muted, fontSize = 12.sp)
+                Text(
+                    "${info.need - info.into} XP  →  ${T("LV")} ${info.level + 1}",
+                    color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
     val haptic = LocalHapticFeedback.current
     var xp by remember { mutableStateOf(store.xp(area)) }
@@ -409,8 +474,8 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
     var popText by remember { mutableStateOf("") }
     var popId by remember { mutableStateOf(0) }
 
+    val accent = arenaAccent(area)
     val info = Levels.of(xp)
-    val tone = RankColors.tone(info.level)
     val barP = animatedXpBar(info.level, info.into.toFloat() / info.need)
 
     val todaySec = remember(rev) { store.secondsToday(area) }
@@ -422,6 +487,8 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
     val todayMin = todaySec / 60.0
     val xpToday = Xp.forMinutes(todayMin)
     val xpTodayShown = animatedCount(xpToday)
+    val weekTotal = week.sumOf { it.minutes }
+    val activeDays = heat.sumOf { col -> col.count { (it ?: 0) > 0 } }
 
     val todayIdx = (Calendar.getInstance().get(Calendar.DAY_OF_WEEK) + 5) % 7
     val weekLabels = (6 downTo 0).map { dayLetter(((todayIdx - it) % 7 + 7) % 7) }
@@ -529,30 +596,9 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
                 modifier = Modifier.clickable { onBack() }.padding(vertical = 8.dp)
             )
             Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ArenaBadge(area, 46)
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        RankText(A(area), info.level, 24.sp, fontWeight = FontWeight.Bold)
-                        RankText(
-                            up(T(Ranks.title(info.level))), info.level, 11.sp,
-                            letterSpacing = 2.sp, fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-                LevelPill(info.level)
-            }
-            Spacer(Modifier.height(14.dp))
-            XpBar(barP, 5, tone, popId)
-            Spacer(Modifier.height(5.dp))
-            Text("${info.into} / ${info.need} XP", color = RX.Muted, fontSize = 12.sp)
+            AreaHero(area, info, barP, popId)
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(14.dp))
             TabBar(tab) { tab = it }
             Spacer(Modifier.height(20.dp))
 
@@ -568,9 +614,11 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
                         Row(modifier = Modifier.fillMaxWidth()) {
                             listOf(15, 30, 60, 90).forEachIndexed { i, m ->
                                 if (i > 0) Spacer(Modifier.width(8.dp))
+                                val ok = fits(m)
                                 QuickLog(
                                     m,
-                                    if (fits(m)) "+${gainFor(m)} XP" else "—",
+                                    if (ok) "+${gainFor(m)} XP" else "24${T("h")}",
+                                    ok, accent,
                                     Modifier.weight(1f)
                                 ) { request(m) }
                             }
@@ -588,18 +636,18 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
                                 },
                                 label = { Text(T("Other (min)")) },
                                 singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.weight(1f),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = RX.Text,
                                     unfocusedTextColor = RX.Text,
-                                    focusedBorderColor = RX.Accent,
+                                    focusedBorderColor = accent,
                                     unfocusedBorderColor = RX.Line,
                                     focusedContainerColor = RX.Panel,
                                     unfocusedContainerColor = RX.Panel,
-                                    cursorColor = RX.Accent,
-                                    focusedLabelColor = RX.Accent,
+                                    cursorColor = accent,
+                                    focusedLabelColor = accent,
                                     unfocusedLabelColor = RX.Muted
                                 )
                             )
@@ -618,7 +666,10 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
                                     }
                                     .width(84.dp)
                                     .height(56.dp)
-                                    .background(RX.Button, RoundedCornerShape(12.dp)),
+                                    .background(
+                                        Brush.horizontalGradient(listOf(accent, accent.copy(alpha = 0.78f))),
+                                        RoundedCornerShape(14.dp)
+                                    ),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(T("LOG"), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
@@ -637,33 +688,41 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
                             fontSize = 12.sp
                         )
 
-                        Spacer(Modifier.height(22.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(T("TODAY'S XP"), color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
-                            Text("+$xpTodayShown XP", color = tone, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(20.dp))
+                        SectionCard(T("TODAY'S XP")) {
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text(
+                                    "+$xpTodayShown",
+                                    color = accent, fontSize = 38.sp, fontWeight = FontWeight.ExtraBold
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    "XP", color = RX.Muted, fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(bottom = 7.dp)
+                                )
+                            }
+                            Spacer(Modifier.height(14.dp))
+                            Box(Modifier.fillMaxWidth().height(1.dp).background(RX.Line))
+                            Spacer(Modifier.height(14.dp))
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                MiniStat(T("TODAY"), ftime(todaySec), Modifier.weight(1f))
+                                MiniStat(T("TOTAL"), ftime(totalSec), Modifier.weight(1f))
+                                MiniStat(T("LOGS"), "$count", Modifier.weight(1f))
+                            }
                         }
 
-                        Spacer(Modifier.height(16.dp))
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            StatBox(T("TODAY"), ftime(todaySec), Modifier.weight(1f))
-                            Spacer(Modifier.width(8.dp))
-                            StatBox(T("TOTAL"), ftime(totalSec), Modifier.weight(1f))
-                            Spacer(Modifier.width(8.dp))
-                            StatBox(T("LOGS"), "$count", Modifier.weight(1f))
+                        Spacer(Modifier.height(14.dp))
+                        SectionCard(T("LAST 7 DAYS"), ftime(weekTotal * 60)) {
+                            WeekChart(week, accent, weekLabels)
                         }
-                        Spacer(Modifier.height(22.dp))
-                        Text(T("LAST 7 DAYS"), color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
-                        Spacer(Modifier.height(10.dp))
-                        WeekChart(week, tone, weekLabels)
-                        Spacer(Modifier.height(22.dp))
-                        Text(T("LAST 16 WEEKS"), color = RX.Muted, fontSize = 11.sp, letterSpacing = 3.sp)
-                        Spacer(Modifier.height(12.dp))
-                        Heatmap(heat)
-                        Spacer(Modifier.height(8.dp))
-                        HeatLegend()
+
+                        Spacer(Modifier.height(14.dp))
+                        SectionCard(T("LAST 16 WEEKS"), daysText(activeDays)) {
+                            Heatmap(heat)
+                            Spacer(Modifier.height(8.dp))
+                            HeatLegend()
+                        }
                     } else {
                         Text(
                             TF("YOUR LOGS  ·  %d", hist.size),
@@ -697,11 +756,11 @@ fun AreaScreen(store: Store, area: String, onBack: () -> Unit) {
             Row(
                 modifier = Modifier
                     .background(RX.Panel, RoundedCornerShape(12.dp))
-                    .border(1.dp, RX.Accent, RoundedCornerShape(12.dp))
+                    .border(1.dp, accent, RoundedCornerShape(12.dp))
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(shown, color = RX.Accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(shown, color = accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 if (undoable) {
                     Spacer(Modifier.width(14.dp))
                     Text(
