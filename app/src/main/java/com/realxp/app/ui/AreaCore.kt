@@ -8,8 +8,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -33,6 +37,18 @@ import kotlinx.coroutines.delay
 
 object Chrome {
     var darkSurface by mutableStateOf(false)
+}
+
+@Composable
+fun PickCheck(bg: Color, tint: Color, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(16.dp)
+            .background(bg, CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(Icons.Outlined.Check, contentDescription = null, tint = tint, modifier = Modifier.size(11.dp))
+    }
 }
 
 data class AreaStats(
@@ -269,8 +285,10 @@ interface ArenaSkin {
 }
 
 fun skinFor(area: String): ArenaSkin = when (area) {
-    "Coding" -> CodingSkin
-    "English" -> EnglishSkin
+    "Coding" -> CodingFixed
+    "English" -> EnglishFixed
+    "History" -> HistorySkin
+    "AI" -> AISkin
     else -> DefaultSkin
 }
 
