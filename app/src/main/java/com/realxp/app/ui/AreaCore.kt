@@ -284,14 +284,6 @@ interface ArenaSkin {
     fun LevelUp(area: String, level: Int, gained: Int, onDismiss: () -> Unit)
 }
 
-fun skinFor(area: String): ArenaSkin = when (area) {
-    "Coding" -> CodingFixed
-    "English" -> EnglishFixed
-    "History" -> HistorySkin
-    "AI" -> AISkin
-    else -> DefaultSkin
-}
-
 @Composable
 fun LevelUpHost(s: AreaState, skin: ArenaSkin) {
     val lu = s.levelUp
