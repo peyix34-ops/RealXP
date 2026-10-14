@@ -9,5 +9,6 @@ fun skinFor(area: String): ArenaSkin = when (area) {
     "Science" -> ScienceSkin
     "Gaming" -> GamingSkin
     "Finance" -> FinanceSkin
+    "Sleep" -> SleepSkin
     else -> DefaultSkin
 }
