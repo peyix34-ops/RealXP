@@ -26,19 +26,25 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: "15859902"
+          packages: ""
+          accept-android-sdk-licenses: "true"
+          log-accepted-android-sdk-licenses: "false"
 
-      - name: Install Android SDK packages
+      - name: Install Android 36 SDK
         shell: bash
         run: |
           set -euo pipefail
+
           sdkmanager --install \
             "platforms;android-36" \
             "build-tools;36.0.0"
@@ -48,7 +54,8 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
-      - name: Validate signing secrets
+      - name: Check signing configuration
+        id: signing
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -58,19 +65,19 @@ jobs:
         run: |
           set -euo pipefail
 
-          for name in \
-            ANDROID_KEYSTORE_BASE64 \
-            ANDROID_KEYSTORE_PASSWORD \
-            ANDROID_KEY_ALIAS \
-            ANDROID_KEY_PASSWORD
-          do
-            if [[ -z "${!name:-}" ]]; then
-              echo "::error::Missing secret: ${name}"
-              exit 1
-            fi
-          done
+          if [[ -n "${ANDROID_KEYSTORE_BASE64:-}" &&
+                -n "${ANDROID_KEYSTORE_PASSWORD:-}" &&
+                -n "${ANDROID_KEY_ALIAS:-}" &&
+                -n "${ANDROID_KEY_PASSWORD:-}" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Signing configuration detected."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Signing secrets are not configured. The build will be an unsigned test bundle, not ready for Google Play."
+          fi
 
-      - name: Prepare upload keystore
+      - name: Decode and validate upload key
+        if: steps.signing.outputs.enabled == 'true'
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -103,27 +110,43 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          gradle --no-daemon clean bundleRelease
+          gradle --no-daemon --stacktrace clean bundleRelease
 
-      - name: Verify AAB
+      - name: Verify generated bundle
         shell: bash
+        env:
+          SIGNING_ENABLED: ${{ steps.signing.outputs.enabled }}
         run: |
           set -euo pipefail
 
           AAB="app/build/outputs/bundle/release/app-release.aab"
 
           if [[ ! -s "$AAB" ]]; then
-            echo "::error::AAB file was not generated."
+            echo "::error::The AAB file was not generated."
             exit 1
           fi
 
-          jarsigner -verify "$AAB" >/dev/null
-          echo "AAB signature verification passed."
+          if [[ "$SIGNING_ENABLED" == "true" ]]; then
+            jarsigner -verify "$AAB" >/dev/null
+            echo "Signed AAB verification passed."
+          else
+            echo "::warning::Unsigned test bundle created. Do not upload it to Google Play."
+          fi
 
-      - name: Upload AAB artifact
+      - name: Upload signed Play Store bundle
+        if: steps.signing.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: RealXP-play-store-aab
           path: app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload unsigned test bundle
+        if: steps.signing.outputs.enabled != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: RealXP-UNSIGNED-TEST-ONLY
+          path: app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 3
