@@ -1,5 +1,4 @@
-
-name: Build APK
+name: Build installable APK
 
 on:
   workflow_dispatch:
@@ -8,12 +7,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: realxp-debug-apk
-  cancel-in-progress: true
+  group: realxp-apk
+  cancel-in-progress: false
 
 jobs:
   build:
-    name: Build and package debug APK
+    name: Build APK for testing or updating
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -29,33 +28,107 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: "15859902"
+          packages: ""
+          accept-android-sdk-licenses: "true"
+          log-accepted-android-sdk-licenses: "false"
+
+      - name: Install Android 36 SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager --install \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
 
-      - name: Build debug APK
-        run: gradle --no-daemon --stacktrace assembleDebug
-
-      - name: Verify APK exists
+      - name: Check signing configuration
+        id: signing
         shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-
-          APK="app/build/outputs/apk/debug/app-debug.apk"
-
-          if [[ ! -s "$APK" ]]; then
-            echo "::error::Debug APK was not generated."
-            exit 1
+          if [[ -n "${ANDROID_KEYSTORE_BASE64:-}" &&
+                -n "${ANDROID_KEYSTORE_PASSWORD:-}" &&
+                -n "${ANDROID_KEY_ALIAS:-}" &&
+                -n "${ANDROID_KEY_PASSWORD:-}" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Signing key missing. Building a debug APK for testing only."
           fi
 
-          echo "APK generated successfully."
+      - name: Decode and validate upload key
+        if: steps.signing.outputs.enabled == 'true'
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/realxp-upload-key.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" \
+            | base64 --decode > "$KEYSTORE"
+          test -s "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          keytool -list \
+            -keystore "$KEYSTORE" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS" >/dev/null
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+
+      - name: Build signed release APK
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: gradle --no-daemon --stacktrace clean assembleRelease
+
+      - name: Build debug APK without upload key
+        if: steps.signing.outputs.enabled != 'true'
+        run: gradle --no-daemon --stacktrace clean assembleDebug
+
+      - name: Verify APK
+        shell: bash
+        env:
+          SIGNING_ENABLED: ${{ steps.signing.outputs.enabled }}
+        run: |
+          set -euo pipefail
+          if [[ "$SIGNING_ENABLED" == "true" ]]; then
+            APK="app/build/outputs/apk/release/app-release.apk"
+          else
+            APK="app/build/outputs/apk/debug/app-debug.apk"
+          fi
+          test -s "$APK"
           ls -lh "$APK"
 
-      - name: Upload APK
+      - name: Upload signed APK
+        if: steps.signing.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: RealXP-debug-APK
+          name: RealXP-signed-update-APK-v0.2
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload debug test APK
+        if: steps.signing.outputs.enabled != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: RealXP-debug-APK-v0.2-TEST-ONLY
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 3
